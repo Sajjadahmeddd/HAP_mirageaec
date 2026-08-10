@@ -1,0 +1,49 @@
+{
+  "version": 2,
+  "page_signature": "Air System Name",
+  "csv_columns": [
+    "Zone Name / Space Name",
+    "Floor Area (m²)",
+    "Total Coil Load (KW)",
+    "Sens Coil Load (KW)",
+    "Air Flow (L/s)",
+    "Coil Entering DB / WB (°C)",
+    "Coil Leaving DB / WB (°C)",
+    "Water Flow @9.0 K (L/s)",
+    "W/m2",
+    "Qty",
+    "Total KW",
+    "ESP",
+    "FCU Types",
+    "Remarks"
+  ],
+  "unit_fields": {
+    "name":          { "anchor": "Zone Sizing Summary for", "offset": 1 },
+    "floor_area":    { "anchor": "Floor Area", "offset": 1 },
+    "total_coil":    { "section": "Terminal Unit Sizing Data - Cooling", "row_regex": "^Zone \\d+$", "offset": 1 },
+    "sens_coil":     { "section": "Terminal Unit Sizing Data - Cooling", "row_regex": "^Zone \\d+$", "offset": 2 },
+    "coil_entering": { "section": "Terminal Unit Sizing Data - Cooling", "row_regex": "^Zone \\d+$", "offset": 3 },
+    "coil_leaving":  { "section": "Terminal Unit Sizing Data - Cooling", "row_regex": "^Zone \\d+$", "offset": 4 },
+    "water_flow":    { "section": "Terminal Unit Sizing Data - Cooling", "row_regex": "^Zone \\d+$", "offset": 5 }
+  },
+  "space_table": {
+    "section_anchor": "Space Loads and Airflows",
+    "zone_row_regex": "^Zone \\d+$",
+    "footer_anchor": "Hourly Analysis Program",
+    "merge_time_of_peak": true,
+    "fields": {
+      "air_flow":   { "offset": 4 },
+      "floor_area": { "offset": 6 }
+    }
+  },
+  "mandatory": {
+    "unit":  ["total_coil", "sens_coil", "coil_entering", "coil_leaving", "water_flow", "floor_area"],
+    "space": ["name", "floor_area", "air_flow"]
+  },
+  "numeric_unit_fields": ["total_coil", "floor_area"],
+  "derived": {
+    "qty_default": "1",
+    "w_per_m2_decimals": 2
+  },
+  "csv_encoding": "utf-8-sig"
+}

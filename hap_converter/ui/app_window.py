@@ -52,6 +52,7 @@ class TitleBar(QFrame):
 
         for text, handler, name in (
             ("–", window.showMinimized, "WinBtn"),
+            ("□", self._toggle_maximize, "WinBtn"),
             ("✕", window.close, "WinBtnClose"),
         ):
             btn = QPushButton(text)
@@ -59,6 +60,16 @@ class TitleBar(QFrame):
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(handler)
             lay.addWidget(btn)
+            if text == "□":
+                self._max_btn = btn
+
+    def _toggle_maximize(self) -> None:
+        if self._window.isMaximized():
+            self._window.showNormal()
+            self._max_btn.setText("□")
+        else:
+            self._window.showMaximized()
+            self._max_btn.setText("❐")
 
     # window dragging
     def mousePressEvent(self, event) -> None:
@@ -73,14 +84,11 @@ class TitleBar(QFrame):
         self._drag_pos = None
 
     def mouseDoubleClickEvent(self, event) -> None:
-        if self._window.isMaximized():
-            self._window.showNormal()
-        else:
-            self._window.showMaximized()
+        self._toggle_maximize()
 
 
 class TabBar(QFrame):
-    def __init__(self):
+    def __init__(self, on_hapext=None):
         super().__init__()
         self.setObjectName("TabBar")
         lay = QHBoxLayout(self)
@@ -95,6 +103,10 @@ class TabBar(QFrame):
             btn.setProperty("tabRole", "tab")
             btn.setProperty("tabActive", "true" if active else "false")
             btn.setEnabled(enabled)
+            if enabled and on_hapext:
+                btn.setCursor(Qt.PointingHandCursor)
+                btn.setToolTip("Go to the HAPExt home screen")
+                btn.clicked.connect(on_hapext)
             if not enabled:
                 btn.setToolTip("Coming soon")
             lay.addWidget(btn)
@@ -130,7 +142,7 @@ class AppWindow(QMainWindow):
         shell_lay.setContentsMargins(0, 0, 0, 0)
         shell_lay.setSpacing(0)
         shell_lay.addWidget(TitleBar(self))
-        shell_lay.addWidget(TabBar())
+        shell_lay.addWidget(TabBar(on_hapext=self.go_home))
 
         self.stack = QStackedWidget()
         self.home_page = HomePage(self)

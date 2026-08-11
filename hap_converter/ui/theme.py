@@ -283,5 +283,18 @@ QRadioButton:disabled {{ color: {TEXT_MUTED}; }}
 #StatusOk {{ color: {GREEN_DARK}; font-size: 12px; font-weight: 700; }}
 #StatusFail {{ color: {RED}; font-size: 12px; font-weight: 700; }}
 QScrollArea {{ border: none; background: transparent; }}
-#IssueRow {{ font-size: 12px; color: {TEXT}; }}
+#IssueRowFrame {{
+    background: {RED_SOFT};
+    border: 1px solid #F5C6C6;
+    border-radius: 10px;
+}}
+#IssueBadge {{
+    background: {RED};
+    color: white;
+    border-radius: 8px;
+    padding: 3px 6px;
+    font-size: 10px;
+    font-weight: 800;
+}}
+#IssueText {{ font-size: 12px; color: {TEXT}; }}
 """

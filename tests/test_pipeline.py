@@ -64,6 +64,14 @@ def test_cancel_stops_conversion_and_writes_nothing(sample_pdf, tmp_path, config
     assert len(pages_seen) < 4  # stopped before the last pages
 
 
+def test_unwritable_output_dir_returns_issue_not_exception(sample_pdf, tmp_path, config):
+    missing_dir = tmp_path / "does" / "not" / "exist"
+    result = pipeline.convert(str(sample_pdf), str(missing_dir), config)
+    assert not result.ok
+    assert result.issues[0].field == "error"
+    assert "Could not write the CSV" in result.issues[0].description
+
+
 def test_output_auto_versions_on_second_run(sample_pdf, tmp_path, config):
     out_dir = tmp_path / "out"
     out_dir.mkdir()

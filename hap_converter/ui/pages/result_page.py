@@ -15,9 +15,9 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QListWidget,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -51,7 +51,12 @@ class ResultPage(QWidget):
         self.pill.setObjectName("PillOk")
         head.addWidget(self.pill)
         head.addStretch(1)
-        self.try_another_btn = QPushButton("Try another PDF")
+        self.home_btn = QPushButton("Home")
+        self.home_btn.setObjectName("Secondary")
+        self.home_btn.setCursor(Qt.PointingHandCursor)
+        self.home_btn.clicked.connect(self._ctx.go_home)
+        head.addWidget(self.home_btn)
+        self.try_another_btn = QPushButton("Convert another PDF")
         self.try_another_btn.setObjectName("Secondary")
         self.try_another_btn.setCursor(Qt.PointingHandCursor)
         self.try_another_btn.clicked.connect(self._ctx.go_upload)
@@ -99,10 +104,24 @@ class ResultPage(QWidget):
         self.preview = PreviewTable()
         body.addWidget(self.preview, 1)
 
-        self.issues_list = QListWidget()
-        self.issues_list.setObjectName("IssueRow")
-        self.issues_list.hide()
-        body.addWidget(self.issues_list, 1)
+        # failure state: headline + scrollable rich issue rows
+        self.issues_panel = QWidget()
+        issues_lay = QVBoxLayout(self.issues_panel)
+        issues_lay.setContentsMargins(0, 0, 0, 0)
+        issues_lay.setSpacing(8)
+        self.issues_headline = label("", "H2")
+        issues_lay.addWidget(self.issues_headline)
+        self.issues_scroll = QScrollArea()
+        self.issues_scroll.setWidgetResizable(True)
+        self.issues_rows_host = QWidget()
+        self.issues_rows_lay = QVBoxLayout(self.issues_rows_host)
+        self.issues_rows_lay.setContentsMargins(0, 0, 8, 0)
+        self.issues_rows_lay.setSpacing(6)
+        self.issues_rows_lay.addStretch(1)
+        self.issues_scroll.setWidget(self.issues_rows_host)
+        issues_lay.addWidget(self.issues_scroll, 1)
+        self.issues_panel.hide()
+        body.addWidget(self.issues_panel, 1)
 
         # ---------------- footer
         foot = QHBoxLayout()
@@ -136,11 +155,11 @@ class ResultPage(QWidget):
         self.pill.setText("COMPLETED")
         self.pill.setObjectName("PillOk")
         self._repolish(self.pill)
-        self.try_another_btn.hide()
+        self.try_another_btn.setText("Convert another PDF")
         self.download_btn.show()
         self.download_btn2.show()
         self.sheet_tab.show()
-        self.issues_list.hide()
+        self.issues_panel.hide()
         self.preview.show()
 
         out = result.output_path
@@ -167,22 +186,32 @@ class ResultPage(QWidget):
         )
 
     def _show_failure(self, result: Result, pdf_path: str) -> None:
-        self.title_label.setText("Export blocked — missing data")
+        self.title_label.setText("Export blocked")
         self.pill.setText("FAILED")
         self.pill.setObjectName("PillFail")
         self._repolish(self.pill)
-        self.try_another_btn.show()
+        self.try_another_btn.setText("Try another PDF")
         self.download_btn.hide()
         self.download_btn2.hide()
         self.sheet_tab.hide()
         self.preview.hide()
-        self.issues_list.show()
+        self.issues_panel.show()
 
         self.breadcrumb.setText(f"{Path(pdf_path).name}  →  nothing exported")
-        self.issues_list.clear()
-        for issue in result.issues:
-            self.issues_list.addItem(
-                f"Page {issue.page} — {issue.field}: {issue.description}"
+
+        issues = sorted(result.issues, key=lambda i: i.page)
+        n = len(issues)
+        self.issues_headline.setText(
+            f"{n} problem{'s' if n != 1 else ''} found — fix the HAP report and re-process:"
+        )
+        # rebuild the rich rows (badge: page, bold field, wrapped description)
+        while self.issues_rows_lay.count() > 1:  # keep the trailing stretch
+            item = self.issues_rows_lay.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        for issue in issues:
+            self.issues_rows_lay.insertWidget(
+                self.issues_rows_lay.count() - 1, self._issue_row(issue)
             )
         self._summary_keys["COLUMNS"].setText("ISSUES")
         self._set_summary(
@@ -200,6 +229,26 @@ class ResultPage(QWidget):
         )
 
     # ------------------------------------------------------------- helpers
+    @staticmethod
+    def _issue_row(issue) -> QFrame:
+        row = QFrame()
+        row.setObjectName("IssueRowFrame")
+        lay = QHBoxLayout(row)
+        lay.setContentsMargins(12, 8, 12, 8)
+        lay.setSpacing(12)
+        badge_text = f"Page {issue.page}" if issue.page else "File"
+        badge = QLabel(badge_text)
+        badge.setObjectName("IssueBadge")
+        badge.setAlignment(Qt.AlignCenter)
+        badge.setFixedWidth(70)
+        lay.addWidget(badge, 0, Qt.AlignTop)
+        text = QLabel(f"<b>{issue.field}</b> — {issue.description}")
+        text.setObjectName("IssueText")
+        text.setWordWrap(True)
+        text.setTextFormat(Qt.RichText)
+        lay.addWidget(text, 1)
+        return row
+
     def _set_summary(self, **values) -> None:
         for key, value in values.items():
             lbl = self._summary_values[key]

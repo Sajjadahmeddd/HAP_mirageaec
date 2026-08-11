@@ -28,11 +28,25 @@ class ConvertWorker(QThread):
         self._cancelled = True
 
     def run(self) -> None:
-        result = pipeline.convert(
-            self._pdf_path,
-            self._output_dir,
-            self._config,
-            progress_cb=lambda done, total, msg: self.progress.emit(done, total, msg),
-            cancel_cb=lambda: self._cancelled,
-        )
+        try:
+            result = pipeline.convert(
+                self._pdf_path,
+                self._output_dir,
+                self._config,
+                progress_cb=lambda done, total, msg: self.progress.emit(done, total, msg),
+                cancel_cb=lambda: self._cancelled,
+            )
+        except Exception as exc:  # last-resort guard: the UI must always get a reason
+            result = pipeline.Result(
+                ok=False,
+                output_path=None,
+                issues=[
+                    pipeline.Issue(
+                        page=0,
+                        field="error",
+                        description=f"Unexpected error during conversion: {exc}",
+                    )
+                ],
+                stats={},
+            )
         self.finished_result.emit(result)

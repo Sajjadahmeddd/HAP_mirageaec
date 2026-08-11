@@ -66,10 +66,19 @@ def convert(
 
     if progress_cb:
         progress_cb(1, 1, "Writing CSV")
-    rows = synthesizer.build_rows(units, config)
-    out_path = exporter.write_csv(
-        rows, output_dir, Path(pdf_path).stem, encoding=config.csv_encoding
-    )
+    try:
+        rows = synthesizer.build_rows(units, config)
+        out_path = exporter.write_csv(
+            rows, output_dir, Path(pdf_path).stem, encoding=config.csv_encoding
+        )
+    except Exception as exc:  # e.g. output folder locked / not writable
+        stats["elapsed_s"] = round(time.perf_counter() - started, 2)
+        return Result(
+            ok=False,
+            output_path=None,
+            issues=[Issue(page=0, field="error", description=f"Could not write the CSV: {exc}")],
+            stats=stats,
+        )
 
     stats["rows"] = len(rows) - 1  # excluding header
     stats["elapsed_s"] = round(time.perf_counter() - started, 2)

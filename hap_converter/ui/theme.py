@@ -4,6 +4,7 @@ white rounded cards, red PDF iconography.
 """
 
 NAVY = "#141B4D"
+ORANGE = "#E8862E"
 NAVY_SOFT = "#3D4B9E"
 BLUE = "#1E5EDB"
 GREEN = "#6E8B23"
@@ -36,7 +37,12 @@ QMainWindow, #Canvas {{
 #BrandLabel {{
     font-size: 16px;
     font-weight: 800;
-    color: {BLUE};
+}}
+#VersionLabel {{
+    color: {TEXT_MUTED};
+    font-size: 11px;
+    font-weight: 700;
+    padding-top: 3px;
 }}
 QPushButton#WinBtn, QPushButton#WinBtnClose {{
     background: #1E1E1E;

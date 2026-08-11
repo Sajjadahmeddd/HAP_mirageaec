@@ -17,7 +17,12 @@ from hap_converter.ui.app_window import AppWindow
 
 def default_config_path() -> Path:
     if getattr(sys, "frozen", False):  # PyInstaller bundle
-        return Path(sys.executable).parent / "mapping.json"
+        # A mapping.json next to the exe wins (user-editable override);
+        # otherwise fall back to the copy bundled inside the exe.
+        beside_exe = Path(sys.executable).parent / "mapping.json"
+        if beside_exe.is_file():
+            return beside_exe
+        return Path(getattr(sys, "_MEIPASS", ".")) / "mapping.json"
     return Path(__file__).resolve().parents[1] / "config" / "mapping.json"
 
 

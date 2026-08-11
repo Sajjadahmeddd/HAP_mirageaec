@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from hap_converter import __version__
 from hap_converter.engine.config import Config
 from hap_converter.engine.pipeline import Result
 
@@ -47,7 +48,14 @@ class TitleBar(QFrame):
         logo = QLabel("▰")
         logo.setStyleSheet(f"color: {theme.GREEN}; font-size: 16px;")
         lay.addWidget(logo)
-        lay.addWidget(label("MAEC", "BrandLabel"))
+        brand = QLabel(
+            f'<span style="color:{theme.ORANGE}">M</span>'
+            f'<span style="color:{theme.GREEN}">AEC</span>'
+        )
+        brand.setObjectName("BrandLabel")
+        brand.setTextFormat(Qt.RichText)
+        lay.addWidget(brand)
+        lay.addWidget(label(f"v{__version__}", "VersionLabel"))
         lay.addStretch(1)
 
         for text, handler, name in (

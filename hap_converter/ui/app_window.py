@@ -5,6 +5,7 @@ bar, and a QStackedWidget hosting the four pages. Owns shared state
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -183,11 +184,21 @@ class AppWindow(QMainWindow):
         self.upload_page.preselect(entry.pdf_path)
 
     # ---------------------------------------------------------- conversion
+    @staticmethod
+    def staging_dir() -> str:
+        """Hidden working folder: converted CSVs live here until the user
+        explicitly saves via Download CSV — nothing appears next to the PDF."""
+        base = os.environ.get("LOCALAPPDATA") or str(Path.home())
+        path = Path(base) / "MAEC" / "output"
+        path.mkdir(parents=True, exist_ok=True)
+        return str(path)
+
     def start_conversion(self) -> None:
         if not self.pdf_path or self._worker is not None:
             return
         self._cancel_requested = False
-        out_dir = self.output_dir or str(Path(self.pdf_path).parent)
+        # an explicitly chosen output folder is honored; otherwise stage
+        out_dir = self.output_dir if self.output_dir_overridden else self.staging_dir()
         self.convert_page.begin(self.pdf_path, self.pdf_size)
         self.stack.setCurrentWidget(self.convert_page)
 

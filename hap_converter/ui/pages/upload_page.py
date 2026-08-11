@@ -134,8 +134,6 @@ class UploadPage(QWidget):
         self.drop_zone.show_file(path, pages=0, size_bytes=Path(path).stat().st_size)
         self.upload_btn.setEnabled(True)
         self.convert_btn.setEnabled(False)
-        if not self._ctx.output_dir_overridden:
-            self._ctx.output_dir = str(Path(path).parent)
         self._refresh_output_label()
 
     def _upload(self) -> None:
@@ -164,7 +162,10 @@ class UploadPage(QWidget):
             self._refresh_output_label()
 
     def _refresh_output_label(self) -> None:
-        self.output_label.setText(f"Output: {self._ctx.output_dir or '—'}")
+        if self._ctx.output_dir_overridden and self._ctx.output_dir:
+            self.output_label.setText(f"Output: {self._ctx.output_dir}")
+        else:
+            self.output_label.setText("Output: chosen when you download")
 
     # ------------------------------------------------------------- external
     def preselect(self, path: str) -> None:

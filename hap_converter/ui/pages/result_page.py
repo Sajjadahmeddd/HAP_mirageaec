@@ -283,8 +283,10 @@ class ResultPage(QWidget):
         if not (self._result and self._result.ok and self._result.output_path):
             return
         src = self._result.output_path
+        downloads = Path.home() / "Downloads"
+        start_dir = downloads if downloads.is_dir() else Path.home()
         target, _ = QFileDialog.getSaveFileName(
-            self, "Save CSV as", str(Path.home() / src.name), "CSV files (*.csv)"
+            self, "Save CSV as", str(start_dir / src.name), "CSV files (*.csv)"
         )
         if not target:
             return

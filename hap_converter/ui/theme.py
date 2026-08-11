@@ -289,6 +289,26 @@ QRadioButton:disabled {{ color: {TEXT_MUTED}; }}
 #StatusOk {{ color: {GREEN_DARK}; font-size: 12px; font-weight: 700; }}
 #StatusFail {{ color: {RED}; font-size: 12px; font-weight: 700; }}
 QScrollArea {{ border: none; background: transparent; }}
+
+/* ---------- message boxes (dark, per user preference) ---------- */
+QMessageBox {{
+    background: #1F1F1F;
+}}
+QMessageBox QLabel {{
+    color: white;
+    font-size: 12px;
+}}
+QMessageBox QPushButton {{
+    background: {GREEN};
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 22px;
+    font-size: 12px;
+    font-weight: 700;
+    min-width: 60px;
+}}
+QMessageBox QPushButton:hover {{ background: {GREEN_DARK}; }}
 #IssueRowFrame {{
     background: {RED_SOFT};
     border: 1px solid #F5C6C6;

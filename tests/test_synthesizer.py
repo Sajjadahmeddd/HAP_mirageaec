@@ -54,6 +54,41 @@ def test_row_count(config):
     assert len(rows) == 1 + 2 * (1 + 2)  # header + 2 units x (1 header + 2 spaces)
 
 
+DETAILS = {
+    "project": "Avarra by Palace",
+    "project_no": "MLD",
+    "stage": "100 % DD",
+    "discipline": "MEP",
+    "author": "SA",
+    "checked": "FA",
+    "revision": "2",
+    "date": "20.04.2026",
+}
+
+
+def test_project_header_block_layout():
+    rows = synthesizer.build_project_header(DETAILS)
+    assert len(rows) == 5
+    assert all(len(r) == 14 for r in rows)
+    # left zone A-F, right zone G-N (template layout)
+    assert rows[0][0] == "FCU SCHEDULE"
+    assert rows[0][6] == "mirage"  # logo placeholder (CSV cannot embed images)
+    assert rows[1][0] == "Project:" and rows[1][1] == "Avarra by Palace"
+    assert rows[1][6] == "Author:" and rows[1][7] == "SA"
+    assert rows[2][0] == "Project No:" and rows[2][6] == "Checked:"
+    assert rows[3][0] == "Stage:" and rows[3][6] == "Revision:"
+    assert rows[4][0] == "Discipline:" and rows[4][1] == "MEP"
+    assert rows[4][6] == "Date:" and rows[4][7] == "20.04.2026"
+
+
+def test_project_header_rejects_missing_fields():
+    import pytest
+
+    incomplete = dict(DETAILS, author="  ")
+    with pytest.raises(ValueError, match="author"):
+        synthesizer.build_project_header(incomplete)
+
+
 def test_thousands_separator_in_source_string(config):
     unit = make_unit()
     unit.total_coil = "1,250.00"

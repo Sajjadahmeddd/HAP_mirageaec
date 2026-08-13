@@ -290,6 +290,31 @@ QRadioButton:disabled {{ color: {TEXT_MUTED}; }}
 #StatusFail {{ color: {RED}; font-size: 12px; font-weight: 700; }}
 QScrollArea {{ border: none; background: transparent; }}
 
+/* ---------- dialogs + form inputs (light, matching the app) ---------- */
+QDialog {{
+    background: {CARD};
+}}
+QLineEdit, QDateEdit {{
+    background: white;
+    color: {TEXT};
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 12px;
+}}
+QLineEdit:focus, QDateEdit:focus {{ border-color: {GREEN}; }}
+QLineEdit::placeholder {{ color: {TEXT_MUTED}; }}
+QDateEdit::drop-down {{ border: none; width: 22px; }}
+QCalendarWidget QWidget {{ background: white; color: {TEXT}; }}
+QCalendarWidget QAbstractItemView {{
+    background: white;
+    color: {TEXT};
+    selection-background-color: {GREEN};
+    selection-color: white;
+}}
+QCalendarWidget QToolButton {{ background: {NAVY}; color: white; border-radius: 4px; padding: 4px 8px; }}
+QFormLayout QLabel {{ font-size: 12px; font-weight: 600; }}
+
 /* ---------- message boxes (dark, per user preference) ---------- */
 QMessageBox {{
     background: #1F1F1F;

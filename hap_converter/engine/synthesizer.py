@@ -37,6 +37,52 @@ def _total_kw(unit: Unit, qty_default: str) -> str:
     return format(_to_decimal(unit.total_coil) * _to_decimal(qty_default), "f")
 
 
+# Mandatory project details entered in the UI before download (FR: FCU
+# schedule header block). Keys are stable identifiers; labels are printed.
+PROJECT_FIELDS = [
+    ("project", "Project:"),
+    ("project_no", "Project No:"),
+    ("stage", "Stage:"),
+    ("discipline", "Discipline:"),
+    ("author", "Author:"),
+    ("checked", "Checked:"),
+    ("revision", "Revision:"),
+    ("date", "Date:"),
+]
+
+
+def build_project_header(details: dict[str, str], num_cols: int = _NUM_COLS) -> list[list[str]]:
+    """The 5 rows above the column header in the downloaded CSV.
+
+    Layout follows the FCU schedule template: a left zone A-F and a right
+    zone G-N. Row 1: A = "FCU SCHEDULE" title, G = "mirage" (logo
+    placeholder — CSV cannot embed images or merge cells; the true merged
+    look needs XLSX output). Rows 2-5: A=label, B=value (Project /
+    Project No / Stage / Discipline); G=label, H=value (Author / Checked /
+    Revision / Date).
+    """
+    missing = [key for key, _ in PROJECT_FIELDS if not details.get(key, "").strip()]
+    if missing:
+        raise ValueError(f"Missing mandatory project details: {', '.join(missing)}")
+
+    rows = []
+    title = [""] * num_cols
+    title[0] = "FCU SCHEDULE"
+    title[6] = "mirage"
+    rows.append(title)
+
+    left = PROJECT_FIELDS[:4]
+    right = PROJECT_FIELDS[4:]
+    for (l_key, l_label), (r_key, r_label) in zip(left, right):
+        row = [""] * num_cols
+        row[0] = l_label
+        row[1] = details[l_key].strip()
+        row[6] = r_label
+        row[7] = details[r_key].strip()
+        rows.append(row)
+    return rows
+
+
 def build_rows(units: list[Unit], config: Config) -> list[list[str]]:
     rows: list[list[str]] = [list(config.csv_columns)]
     for unit in units:

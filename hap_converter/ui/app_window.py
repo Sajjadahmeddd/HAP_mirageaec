@@ -137,6 +137,7 @@ class AppWindow(QMainWindow):
         self.output_dir: str = ""
         self.output_dir_overridden = False
         self.result: Result | None = None
+        self.project_details: dict[str, str] | None = None
         self._worker: ConvertWorker | None = None
         self._cancel_requested = False
 

@@ -6,7 +6,6 @@ failure — same page, two states
 from __future__ import annotations
 
 import csv
-import shutil
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -23,6 +22,9 @@ from PySide6.QtWidgets import (
 )
 
 from ...engine.pipeline import Result
+from ...engine.synthesizer import build_project_header
+from ...engine.xlsx_exporter import write_fcu_xlsx
+from ..project_details_dialog import ProjectDetailsDialog
 from ..widgets import PreviewTable, card, label
 
 PREVIEW_ROWS = 4
@@ -66,9 +68,18 @@ class ResultPage(QWidget):
         self.reprocess_btn.setCursor(Qt.PointingHandCursor)
         self.reprocess_btn.clicked.connect(self._ctx.start_conversion)
         head.addWidget(self.reprocess_btn)
-        self.download_btn = QPushButton("Download CSV")
+        self.details_btn = QPushButton("Project Details")
+        self.details_btn.setObjectName("Secondary")
+        self.details_btn.setCursor(Qt.PointingHandCursor)
+        self.details_btn.setToolTip(
+            "Enter the 8 project details that head the downloaded CSV (mandatory)"
+        )
+        self.details_btn.clicked.connect(self._edit_details)
+        head.addWidget(self.details_btn)
+        self.download_btn = QPushButton("Download")
         self.download_btn.setObjectName("Primary")
         self.download_btn.setCursor(Qt.PointingHandCursor)
+        self.download_btn.setToolTip("Save as Excel (.xlsx, template layout) or CSV")
         self.download_btn.clicked.connect(self._download)
         head.addWidget(self.download_btn)
         body.addLayout(head)
@@ -133,7 +144,7 @@ class ResultPage(QWidget):
         foot_col.addWidget(self.foot_line2)
         foot.addLayout(foot_col)
         foot.addStretch(1)
-        self.download_btn2 = QPushButton("Download CSV")
+        self.download_btn2 = QPushButton("Download")
         self.download_btn2.setObjectName("Primary")
         self.download_btn2.setCursor(Qt.PointingHandCursor)
         self.download_btn2.clicked.connect(self._download)
@@ -156,6 +167,8 @@ class ResultPage(QWidget):
         self.pill.setObjectName("PillOk")
         self._repolish(self.pill)
         self.try_another_btn.setText("Convert another PDF")
+        self.details_btn.show()
+        self._refresh_details_btn()
         self.download_btn.show()
         self.download_btn2.show()
         self.sheet_tab.show()
@@ -191,6 +204,7 @@ class ResultPage(QWidget):
         self.pill.setObjectName("PillFail")
         self._repolish(self.pill)
         self.try_another_btn.setText("Try another PDF")
+        self.details_btn.hide()
         self.download_btn.hide()
         self.download_btn2.hide()
         self.sheet_tab.hide()
@@ -279,19 +293,55 @@ class ResultPage(QWidget):
                     break
         return header, rows
 
+    def _refresh_details_btn(self) -> None:
+        filled = bool(getattr(self._ctx, "project_details", None))
+        self.details_btn.setText("Project Details ✓" if filled else "Project Details")
+
+    def _edit_details(self) -> bool:
+        dialog = ProjectDetailsDialog(
+            self, initial=getattr(self._ctx, "project_details", None)
+        )
+        if dialog.exec() != ProjectDetailsDialog.Accepted:
+            return False
+        self._ctx.project_details = dialog.details()
+        self._refresh_details_btn()
+        return True
+
     def _download(self) -> None:
         if not (self._result and self._result.ok and self._result.output_path):
+            return
+        # the 8 project details are mandatory before download
+        if not getattr(self._ctx, "project_details", None) and not self._edit_details():
             return
         src = self._result.output_path
         downloads = Path.home() / "Downloads"
         start_dir = downloads if downloads.is_dir() else Path.home()
-        target, _ = QFileDialog.getSaveFileName(
-            self, "Save CSV as", str(start_dir / src.name), "CSV files (*.csv)"
+        target, chosen_filter = QFileDialog.getSaveFileName(
+            self,
+            "Save as",
+            str(start_dir / (src.stem + ".xlsx")),
+            "Excel Workbook (*.xlsx);;CSV file (*.csv)",
         )
         if not target:
             return
+        as_csv = target.lower().endswith(".csv") or (
+            "CSV" in chosen_filter and not target.lower().endswith(".xlsx")
+        )
         try:
-            shutil.copyfile(src, target)
-            QMessageBox.information(self, "Saved", f"CSV saved to:\n{target}")
-        except OSError as exc:
+            details = self._ctx.project_details
+            with open(src, encoding="utf-8-sig", newline="") as handle:
+                all_rows = list(csv.reader(handle))
+            column_header, data_rows = all_rows[0], all_rows[1:]
+            if as_csv:
+                if not target.lower().endswith(".csv"):
+                    target += ".csv"
+                header_rows = build_project_header(details)
+                with open(target, "w", encoding="utf-8-sig", newline="") as handle:
+                    csv.writer(handle).writerows(header_rows + all_rows)
+            else:
+                if not target.lower().endswith(".xlsx"):
+                    target += ".xlsx"
+                write_fcu_xlsx(details, column_header, data_rows, target)
+            QMessageBox.information(self, "Saved", f"Saved to:\n{target}")
+        except (OSError, ValueError) as exc:
             QMessageBox.critical(self, "Save failed", str(exc))

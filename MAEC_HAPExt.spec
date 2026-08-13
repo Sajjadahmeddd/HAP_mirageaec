@@ -5,7 +5,7 @@ a = Analysis(
     ['run_app.py'],
     pathex=[],
     binaries=[],
-    datas=[('config/mapping.json', '.')],
+    datas=[('config/mapping.json', '.'), ('hap_converter/ui/assets', 'assets')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

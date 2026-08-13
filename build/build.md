@@ -6,7 +6,8 @@ no Python required on the target machine):
 ```powershell
 .\.venv\Scripts\python -m pip install pyinstaller
 .\.venv\Scripts\pyinstaller --noconfirm --onefile --windowed `
-    --name MAEC_HAPExt --add-data "config\mapping.json;." run_app.py
+    --name MAEC_HAPExt --add-data "config\mapping.json;." `
+    --add-data "hap_converter\ui\assets;assets" run_app.py
 ```
 
 Notes:

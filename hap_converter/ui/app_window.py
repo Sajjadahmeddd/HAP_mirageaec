@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -25,6 +26,7 @@ from hap_converter.engine.config import Config
 from hap_converter.engine.pipeline import Result
 
 from . import theme
+from .resources import asset_path
 from .pages.convert_page import ConvertPage
 from .pages.home_page import HomePage
 from .pages.result_page import ResultPage
@@ -46,8 +48,14 @@ class TitleBar(QFrame):
         lay.setContentsMargins(14, 0, 10, 0)
         lay.setSpacing(8)
 
-        logo = QLabel("▰")
-        logo.setStyleSheet(f"color: {theme.GREEN}; font-size: 16px;")
+        logo = QLabel()
+        logo_file = asset_path("logo.png")
+        if logo_file.is_file():
+            logo.setPixmap(
+                QPixmap(str(logo_file)).scaledToHeight(
+                    26, Qt.SmoothTransformation
+                )
+            )
         lay.addWidget(logo)
         brand = QLabel(
             f'<span style="color:{theme.ORANGE}">M</span>'

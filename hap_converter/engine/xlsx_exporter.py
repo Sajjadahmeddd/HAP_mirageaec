@@ -12,13 +12,17 @@ same guarantee as the CSV path.
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path  # noqa: F401  (used by the logo fallback)
 
 from openpyxl import Workbook
+from openpyxl.drawing.image import Image as XLImage
+from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
+from openpyxl.drawing.xdr import XDRPositiveSize2D
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.utils.units import pixels_to_EMU
 
-from .synthesizer import PROJECT_FIELDS
+from .synthesizer import LOGO_KEY, PROJECT_FIELDS
 
 NAVY = "141B4D"
 LOGO_INK = "1F3B57"
@@ -27,10 +31,47 @@ GRID = "9A9A9A"
 _NUM_COLS = 14
 _COL_WIDTHS = [30, 12, 12, 12, 11, 14, 14, 15, 9, 7, 10, 8, 12, 16]
 
+_LOGO_COL = 7           # G — first column of the logo zone (1-based)
+_TITLE_ROW_PT = 72      # row 1 height in points (tall header, as in the template)
+_PX_PER_WIDTH = 7       # Excel column-width unit -> pixels
+_PT_TO_PX = 4 / 3
+
 _thin = Side(style="thin", color=GRID)
 _border = Border(left=_thin, right=_thin, top=_thin, bottom=_thin)
 _center = Alignment(horizontal="center", vertical="center", wrap_text=True)
 _left = Alignment(horizontal="left", vertical="center")
+
+
+def _place_logo(ws, logo_path: str) -> None:
+    """Embed the user's company logo image centered in the merged G1:N1 cell.
+
+    Falls back to the file name as text if the image cannot be loaded, so a
+    bad image never costs the engineer the whole export.
+    """
+    zone_px = sum(_COL_WIDTHS[_LOGO_COL - 1 :]) * _PX_PER_WIDTH
+    row_px = _TITLE_ROW_PT * _PT_TO_PX
+    max_w, max_h = zone_px - 24, row_px - 8
+
+    try:
+        image = XLImage(logo_path)
+        scale = min(max_w / image.width, max_h / image.height, 1.0)
+        width, height = int(image.width * scale), int(image.height * scale)
+        image.width, image.height = width, height
+        image.anchor = OneCellAnchor(
+            _from=AnchorMarker(
+                col=_LOGO_COL - 1,
+                colOff=pixels_to_EMU(int((zone_px - width) / 2)),
+                row=0,
+                rowOff=pixels_to_EMU(int((row_px - height) / 2)),
+            ),
+            ext=XDRPositiveSize2D(pixels_to_EMU(width), pixels_to_EMU(height)),
+        )
+        ws.add_image(image)
+    except Exception:
+        cell = ws["G1"]
+        cell.value = Path(logo_path).stem
+        cell.font = Font(bold=True, size=18, color=LOGO_INK)
+        cell.alignment = _center
 
 
 def write_fcu_xlsx(
@@ -56,11 +97,8 @@ def write_fcu_xlsx(
     title.alignment = _center
 
     ws.merge_cells("G1:N1")
-    logo = ws["G1"]
-    logo.value = "mirage"
-    logo.font = Font(name="Georgia", bold=True, italic=True, size=22, color=LOGO_INK)
-    logo.alignment = _center
-    ws.row_dimensions[1].height = 40
+    ws.row_dimensions[1].height = _TITLE_ROW_PT
+    _place_logo(ws, details.get(LOGO_KEY, ""))
 
     label_font = Font(bold=True, size=10)
     for row, ((l_key, l_label), (r_key, r_label)) in enumerate(

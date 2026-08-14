@@ -14,6 +14,7 @@ themselves are never touched:
 from __future__ import annotations
 
 from decimal import ROUND_HALF_UP, Decimal
+from pathlib import Path
 
 from .config import Config
 from .models import Unit
@@ -50,6 +51,12 @@ PROJECT_FIELDS = [
     ("date", "Date:"),
 ]
 
+# The company logo is a 10th mandatory input, supplied as an image file.
+# It is embedded in the merged G1:N1 cell of the XLSX; CSV cannot hold an
+# image, so the CSV header falls back to the image's file name.
+LOGO_KEY = "logo_path"
+LOGO_SUFFIXES = (".png", ".jpg", ".jpeg")
+
 
 def build_project_header(details: dict[str, str], num_cols: int = _NUM_COLS) -> list[list[str]]:
     """The 5 rows above the column header in the downloaded CSV.
@@ -68,7 +75,8 @@ def build_project_header(details: dict[str, str], num_cols: int = _NUM_COLS) -> 
     rows = []
     title = [""] * num_cols
     title[0] = "FCU SCHEDULE"
-    title[6] = "mirage"
+    # CSV cannot embed images: name the supplied logo file instead
+    title[6] = Path(details.get(LOGO_KEY, "")).stem
     rows.append(title)
 
     left = PROJECT_FIELDS[:4]

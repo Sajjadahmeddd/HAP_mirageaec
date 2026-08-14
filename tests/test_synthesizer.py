@@ -63,6 +63,7 @@ DETAILS = {
     "checked": "FA",
     "revision": "2",
     "date": "20.04.2026",
+    "logo_path": r"C:\brand\mirage.png",
 }
 
 
@@ -72,7 +73,7 @@ def test_project_header_block_layout():
     assert all(len(r) == 14 for r in rows)
     # left zone A-F, right zone G-N (template layout)
     assert rows[0][0] == "FCU SCHEDULE"
-    assert rows[0][6] == "mirage"  # logo placeholder (CSV cannot embed images)
+    assert rows[0][6] == "mirage"  # CSV cannot embed images: logo file name
     assert rows[1][0] == "Project:" and rows[1][1] == "Avarra by Palace"
     assert rows[1][6] == "Author:" and rows[1][7] == "SA"
     assert rows[2][0] == "Project No:" and rows[2][6] == "Checked:"

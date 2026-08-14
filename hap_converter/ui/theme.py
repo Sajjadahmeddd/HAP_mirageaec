@@ -365,6 +365,11 @@ QCalendarWidget QAbstractItemView {{
 }}
 QCalendarWidget QToolButton {{ background: {NAVY}; color: white; border-radius: 4px; padding: 4px 8px; }}
 QFormLayout QLabel {{ font-size: 12px; font-weight: 600; }}
+#LogoPreview {{
+    background: white;
+    border: 1px solid {BORDER};
+    border-radius: 6px;
+}}
 
 /* ---------- message boxes (dark, per user preference) ---------- */
 QMessageBox {{

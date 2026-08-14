@@ -28,6 +28,7 @@ from hap_converter.engine.pipeline import Result
 from . import theme
 from .resources import asset_path
 from .pages.convert_page import ConvertPage
+from .pages.failure_page import FailurePage
 from .pages.home_page import HomePage
 from .pages.result_page import ResultPage
 from .pages.upload_page import UploadPage
@@ -167,7 +168,14 @@ class AppWindow(QMainWindow):
         self.upload_page = UploadPage(self)
         self.convert_page = ConvertPage(self)
         self.result_page = ResultPage(self)
-        for page in (self.home_page, self.upload_page, self.convert_page, self.result_page):
+        self.failure_page = FailurePage(self)
+        for page in (
+            self.home_page,
+            self.upload_page,
+            self.convert_page,
+            self.result_page,
+            self.failure_page,
+        ):
             self.stack.addWidget(page)
         shell_lay.addWidget(self.stack, 1)
         self.setCentralWidget(shell)
@@ -227,24 +235,26 @@ class AppWindow(QMainWindow):
         if worker is not None:
             worker.wait()
 
+        self.result = result
         cancelled = self._cancel_requested or any(
             issue.field == "cancelled" for issue in result.issues
         )
-        if cancelled:
-            self.go_upload()
-            return
-
-        self.result = result
-        self.recents.add(
-            RecentEntry(
-                pdf_path=self.pdf_path or "",
-                output_path=str(result.output_path) if result.output_path else "",
-                status="completed" if result.ok else "failed",
-                units=result.stats.get("units", 0),
-                spaces=result.stats.get("spaces", 0),
+        if not cancelled:  # cancelled runs are not history
+            self.recents.add(
+                RecentEntry(
+                    pdf_path=self.pdf_path or "",
+                    output_path=str(result.output_path) if result.output_path else "",
+                    status="completed" if result.ok else "failed",
+                    units=result.stats.get("units", 0),
+                    spaces=result.stats.get("spaces", 0),
+                )
             )
-        )
-        self.home_page.refresh()
-        self.upload_page.refresh()
-        self.result_page.show_result(result, self.pdf_path or "")
-        self.stack.setCurrentWidget(self.result_page)
+            self.home_page.refresh()
+            self.upload_page.refresh()
+
+        if result.ok:
+            self.result_page.show_result(result, self.pdf_path or "")
+            self.stack.setCurrentWidget(self.result_page)
+        else:
+            self.failure_page.show_result(result, self.pdf_path or "", self.pdf_size)
+            self.stack.setCurrentWidget(self.failure_page)

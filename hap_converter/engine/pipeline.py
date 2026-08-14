@@ -27,6 +27,12 @@ class Result:
     stats: dict = field(default_factory=dict)
 
 
+_PREFLIGHT_DESCRIPTIONS = {
+    "protected": "This PDF is password protected or restricted from data extraction.",
+    "scanned": "The PDF appears to be scanned. Text cannot be extracted.",
+}
+
+
 def convert(
     pdf_path: str,
     output_dir: str,
@@ -37,6 +43,16 @@ def convert(
     started = time.perf_counter()
 
     try:
+        blocker = parser.preflight(pdf_path)
+        if blocker:
+            return Result(
+                ok=False,
+                output_path=None,
+                issues=[
+                    Issue(page=0, field=blocker, description=_PREFLIGHT_DESCRIPTIONS[blocker])
+                ],
+                stats={"elapsed_s": round(time.perf_counter() - started, 2)},
+            )
         units = list(parser.parse(pdf_path, config, progress_cb, cancel_cb))
     except Exception as exc:  # unreadable / corrupt / non-PDF input
         return Result(

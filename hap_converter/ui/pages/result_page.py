@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
-    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -115,25 +114,6 @@ class ResultPage(QWidget):
         self.preview = PreviewTable()
         body.addWidget(self.preview, 1)
 
-        # failure state: headline + scrollable rich issue rows
-        self.issues_panel = QWidget()
-        issues_lay = QVBoxLayout(self.issues_panel)
-        issues_lay.setContentsMargins(0, 0, 0, 0)
-        issues_lay.setSpacing(8)
-        self.issues_headline = label("", "H2")
-        issues_lay.addWidget(self.issues_headline)
-        self.issues_scroll = QScrollArea()
-        self.issues_scroll.setWidgetResizable(True)
-        self.issues_rows_host = QWidget()
-        self.issues_rows_lay = QVBoxLayout(self.issues_rows_host)
-        self.issues_rows_lay.setContentsMargins(0, 0, 8, 0)
-        self.issues_rows_lay.setSpacing(6)
-        self.issues_rows_lay.addStretch(1)
-        self.issues_scroll.setWidget(self.issues_rows_host)
-        issues_lay.addWidget(self.issues_scroll, 1)
-        self.issues_panel.hide()
-        body.addWidget(self.issues_panel, 1)
-
         # ---------------- footer
         foot = QHBoxLayout()
         foot_col = QVBoxLayout()
@@ -155,11 +135,9 @@ class ResultPage(QWidget):
 
     # ------------------------------------------------------------- states
     def show_result(self, result: Result, pdf_path: str) -> None:
+        """Success only — failures are routed to FailurePage by the shell."""
         self._result = result
-        if result.ok:
-            self._show_success(result, pdf_path)
-        else:
-            self._show_failure(result, pdf_path)
+        self._show_success(result, pdf_path)
 
     def _show_success(self, result: Result, pdf_path: str) -> None:
         self.title_label.setText("CSV Preview")
@@ -167,13 +145,7 @@ class ResultPage(QWidget):
         self.pill.setObjectName("PillOk")
         self._repolish(self.pill)
         self.try_another_btn.setText("Convert another PDF")
-        self.details_btn.show()
         self._refresh_details_btn()
-        self.download_btn.show()
-        self.download_btn2.show()
-        self.sheet_tab.show()
-        self.issues_panel.hide()
-        self.preview.show()
 
         out = result.output_path
         self.breadcrumb.setText(f"{Path(pdf_path).name}  →  {out.name}")
@@ -198,71 +170,7 @@ class ResultPage(QWidget):
             "Review the extracted HAP schedule before downloading."
         )
 
-    def _show_failure(self, result: Result, pdf_path: str) -> None:
-        self.title_label.setText("Export blocked")
-        self.pill.setText("FAILED")
-        self.pill.setObjectName("PillFail")
-        self._repolish(self.pill)
-        self.try_another_btn.setText("Try another PDF")
-        self.details_btn.hide()
-        self.download_btn.hide()
-        self.download_btn2.hide()
-        self.sheet_tab.hide()
-        self.preview.hide()
-        self.issues_panel.show()
-
-        self.breadcrumb.setText(f"{Path(pdf_path).name}  →  nothing exported")
-
-        issues = sorted(result.issues, key=lambda i: i.page)
-        n = len(issues)
-        self.issues_headline.setText(
-            f"{n} problem{'s' if n != 1 else ''} found — fix the HAP report and re-process:"
-        )
-        # rebuild the rich rows (badge: page, bold field, wrapped description)
-        while self.issues_rows_lay.count() > 1:  # keep the trailing stretch
-            item = self.issues_rows_lay.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        for issue in issues:
-            self.issues_rows_lay.insertWidget(
-                self.issues_rows_lay.count() - 1, self._issue_row(issue)
-            )
-        self._summary_keys["COLUMNS"].setText("ISSUES")
-        self._set_summary(
-            FILE="—",
-            ROWS="—",
-            COLUMNS=str(len(result.issues)),
-            SOURCE=Path(pdf_path).name,
-            STATUS=("Validation failed — nothing exported", "StatusFail"),
-        )
-        self.foot_line1.setText(
-            "The PDF is missing mandatory values (all-or-nothing validation)."
-        )
-        self.foot_line2.setText(
-            "Fix the HAP report and re-process, or try another PDF."
-        )
-
     # ------------------------------------------------------------- helpers
-    @staticmethod
-    def _issue_row(issue) -> QFrame:
-        row = QFrame()
-        row.setObjectName("IssueRowFrame")
-        lay = QHBoxLayout(row)
-        lay.setContentsMargins(12, 8, 12, 8)
-        lay.setSpacing(12)
-        badge_text = f"Page {issue.page}" if issue.page else "File"
-        badge = QLabel(badge_text)
-        badge.setObjectName("IssueBadge")
-        badge.setAlignment(Qt.AlignCenter)
-        badge.setFixedWidth(70)
-        lay.addWidget(badge, 0, Qt.AlignTop)
-        text = QLabel(f"<b>{issue.field}</b> — {issue.description}")
-        text.setObjectName("IssueText")
-        text.setWordWrap(True)
-        text.setTextFormat(Qt.RichText)
-        lay.addWidget(text, 1)
-        return row
-
     def _set_summary(self, **values) -> None:
         for key, value in values.items():
             lbl = self._summary_values[key]

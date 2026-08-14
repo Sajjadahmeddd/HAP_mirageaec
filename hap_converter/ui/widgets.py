@@ -147,11 +147,16 @@ class DropZone(QFrame):
 
 
 class StepTimeline(QWidget):
-    """Vertical 3-step progress timeline for the Conversion Status panel."""
+    """Vertical 3-step timeline for the Conversion Status panel.
+
+    Supports a failure state: the failed step gets a red ✕ dot and a red
+    "Failed – …" caption beneath its label (per the Figma failure design).
+    """
 
     def __init__(self, steps: list[str]):
         super().__init__()
         self._dots: list[QLabel] = []
+        self._captions: list[QLabel] = []
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(18)
@@ -162,20 +167,47 @@ class StepTimeline(QWidget):
             dot.setObjectName("StepDotPending")
             dot.setAlignment(Qt.AlignCenter)
             self._dots.append(dot)
-            row.addWidget(dot)
-            row.addWidget(label(text, "H2"))
-            row.addStretch(1)
+            row.addWidget(dot, 0, Qt.AlignTop)
+            text_col = QVBoxLayout()
+            text_col.setSpacing(2)
+            text_col.addWidget(label(text, "H2"))
+            caption = label("", "StepCaption")
+            caption.hide()
+            self._captions.append(caption)
+            text_col.addWidget(caption)
+            row.addLayout(text_col, 1)
             lay.addLayout(row)
+
+    def _apply(self, dot: QLabel, name: str, text: str) -> None:
+        dot.setObjectName(name)
+        dot.setText(text)
+        dot.style().unpolish(dot)
+        dot.style().polish(dot)
 
     def set_step(self, current: int) -> None:
         """Steps below `current` are done, `current` is active (1-based)."""
         for i, dot in enumerate(self._dots, start=1):
             done = i < current
             active = i == current
-            dot.setObjectName("StepDotDone" if (done or active) else "StepDotPending")
-            dot.setText("✓" if done else str(i))
-            dot.style().unpolish(dot)
-            dot.style().polish(dot)
+            self._apply(
+                dot,
+                "StepDotDone" if (done or active) else "StepDotPending",
+                "✓" if done else str(i),
+            )
+            self._captions[i - 1].hide()
+
+    def set_failed(self, failed_step: int, caption: str) -> None:
+        """Steps before `failed_step` are done; `failed_step` shows a red ✕
+        with a caption; later steps stay pending (1-based)."""
+        for i, dot in enumerate(self._dots, start=1):
+            if i < failed_step:
+                self._apply(dot, "StepDotDone", "✓")
+            elif i == failed_step:
+                self._apply(dot, "StepDotFail", "✕")
+            else:
+                self._apply(dot, "StepDotPending", str(i))
+            self._captions[i - 1].setVisible(i == failed_step and bool(caption))
+        self._captions[failed_step - 1].setText(caption)
 
 
 class RecentProjectsPanel(QFrame):

@@ -38,6 +38,39 @@ def test_validation_failure_blocks_export_entirely(bad_pdf, tmp_path, config):
     assert all(issue.page == 1 for issue in result.issues)
 
 
+def test_password_protected_pdf_detected(tmp_path, config):
+    import pymupdf
+
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.insert_text((50, 50), "secret")
+    locked = tmp_path / "locked.pdf"
+    doc.save(
+        str(locked),
+        encryption=pymupdf.PDF_ENCRYPT_AES_256,
+        owner_pw="owner",
+        user_pw="user",
+    )
+    doc.close()
+    result = pipeline.convert(str(locked), str(tmp_path), config)
+    assert not result.ok
+    assert result.issues[0].field == "protected"
+
+
+def test_scanned_image_only_pdf_detected(tmp_path, config):
+    import pymupdf
+
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.draw_rect(pymupdf.Rect(50, 50, 200, 200), fill=(0.5, 0.5, 0.5))  # no text
+    scanned = tmp_path / "scanned.pdf"
+    doc.save(str(scanned))
+    doc.close()
+    result = pipeline.convert(str(scanned), str(tmp_path), config)
+    assert not result.ok
+    assert result.issues[0].field == "scanned"
+
+
 def test_unreadable_file_returns_issue_not_exception(tmp_path, config):
     fake = tmp_path / "not_a_pdf.pdf"
     fake.write_text("hello")

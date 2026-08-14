@@ -275,6 +275,50 @@ QTableWidget::item {{ padding: 4px 8px; }}
     border-radius: 10px;
 }}
 #EtaValue {{ color: {RED}; font-size: 15px; font-weight: 800; }}
+#StepDotFail {{
+    background: {RED};
+    color: white;
+    border-radius: 11px;
+    font-size: 11px;
+    font-weight: 800;
+    min-width: 22px; max-width: 22px;
+    min-height: 22px; max-height: 22px;
+}}
+#StepCaption {{ color: {RED}; font-size: 10px; font-weight: 700; }}
+#EtaBoxFail {{
+    background: {RED_SOFT};
+    border: 1px solid #F5C6C6;
+    border-radius: 10px;
+}}
+
+/* ---------- failure page ---------- */
+#FailTitle {{ font-size: 22px; font-weight: 800; color: {NAVY}; }}
+#ReasonFrame {{
+    background: {CARD};
+    border: 1px solid {BORDER};
+    border-radius: 12px;
+}}
+#ReasonIcon {{
+    background: {RED_SOFT};
+    color: {RED};
+    border-radius: 17px;
+    font-size: 14px;
+    font-weight: 800;
+    min-width: 34px; max-width: 34px;
+    min-height: 34px; max-height: 34px;
+}}
+#ReasonTitle {{ font-size: 12px; font-weight: 700; }}
+#ReasonDesc {{ font-size: 11px; color: {TEXT_MUTED}; }}
+#ReasonSep {{ background: {BORDER}; min-height: 1px; max-height: 1px; border: none; }}
+#FailBadge {{
+    background: {RED};
+    color: white;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 800;
+    min-width: 24px; max-width: 24px;
+    min-height: 24px; max-height: 24px;
+}}
 
 /* ---------- misc ---------- */
 QRadioButton {{ font-size: 13px; font-weight: 600; }}
@@ -289,6 +333,7 @@ QRadioButton:disabled {{ color: {TEXT_MUTED}; }}
 #StatusOk {{ color: {GREEN_DARK}; font-size: 12px; font-weight: 700; }}
 #StatusFail {{ color: {RED}; font-size: 12px; font-weight: 700; }}
 QScrollArea {{ border: none; background: transparent; }}
+QScrollArea > QWidget > QWidget {{ background: transparent; }}
 
 /* ---------- dialogs + form inputs (light, matching the app) ---------- */
 QDialog {{

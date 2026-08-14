@@ -211,6 +211,24 @@ class _PageParser:
         return unit
 
 
+def preflight(pdf_path: str) -> str | None:
+    """Detect PDFs that can never convert, before parsing starts.
+
+    Returns "protected" (password/permission locked), "scanned" (image-only,
+    no extractable text on any sampled page), or None if the file looks
+    parseable.
+    """
+    with pymupdf.open(pdf_path) as doc:
+        if doc.needs_pass:
+            return "protected"
+        pages = min(doc.page_count, 10)
+        if pages and all(
+            not doc.load_page(i).get_text().strip() for i in range(pages)
+        ):
+            return "scanned"
+    return None
+
+
 def parse(
     pdf_path: str,
     config: Config,

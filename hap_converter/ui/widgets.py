@@ -159,8 +159,16 @@ class StepTimeline(QWidget):
         self._captions: list[QLabel] = []
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(18)
+        lay.setSpacing(4)
         for i, text in enumerate(steps):
+            if i:  # connector line between stages (centered under the dots)
+                conn_row = QHBoxLayout()
+                conn_row.setContentsMargins(10, 0, 0, 0)
+                connector = QFrame()
+                connector.setObjectName("StepConnector")
+                conn_row.addWidget(connector)
+                conn_row.addStretch(1)
+                lay.addLayout(conn_row)
             row = QHBoxLayout()
             row.setSpacing(12)
             dot = QLabel(str(i + 1))

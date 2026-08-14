@@ -285,6 +285,12 @@ QTableWidget::item {{ padding: 4px 8px; }}
     min-height: 22px; max-height: 22px;
 }}
 #StepCaption {{ color: {RED}; font-size: 10px; font-weight: 700; }}
+#StepConnector {{
+    background: #DCDCD6;
+    border: none;
+    min-width: 2px; max-width: 2px;
+    min-height: 16px; max-height: 16px;
+}}
 #EtaBoxFail {{
     background: {RED_SOFT};
     border: 1px solid #F5C6C6;

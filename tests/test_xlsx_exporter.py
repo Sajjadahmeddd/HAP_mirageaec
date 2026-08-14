@@ -68,6 +68,31 @@ def test_company_logo_image_embedded_in_logo_zone(tmp_path, DETAILS):
     assert image.anchor._from.colOff > 0
 
 
+def test_padded_logo_is_trimmed_then_fills_the_zone(tmp_path):
+    """A logo with a wide white margin should still read at header size."""
+    padded = tmp_path / "Padded Logo.png"
+    canvas = Image.new("RGB", (400, 400), (255, 255, 255))
+    canvas.paste(Image.new("RGB", (200, 50), (10, 40, 80)), (100, 175))  # 4:1 art
+    canvas.save(padded)
+
+    ws = _load(tmp_path, dict(BASE_DETAILS, logo_path=str(padded)))
+    image = ws._images[0]
+    px_w = image.anchor.ext.cx / EMU_PER_PX
+    px_h = image.anchor.ext.cy / EMU_PER_PX
+    assert abs(px_w / px_h - 4.0) < 0.05      # trimmed to the artwork's aspect
+    assert px_h > 60                          # scaled up to fill the row height
+    assert px_w > 240
+
+
+def test_small_logo_is_enlarged_within_limit(tmp_path):
+    tiny = tmp_path / "Tiny.png"
+    Image.new("RGB", (40, 20), (10, 40, 80)).save(tiny)
+    ws = _load(tmp_path, dict(BASE_DETAILS, logo_path=str(tiny)))
+    image = ws._images[0]
+    px_h = image.anchor.ext.cy / EMU_PER_PX
+    assert 20 < px_h <= 20 * 3.0  # enlarged, but capped to avoid a blur
+
+
 def test_unreadable_logo_falls_back_to_text(tmp_path):
     broken = tmp_path / "Acme Corp.png"
     broken.write_text("not really an image")

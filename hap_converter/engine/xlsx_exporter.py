@@ -1,8 +1,8 @@
 """Excel (.xlsx) writer for the FCU schedule download.
 
 Produces the template structure that CSV cannot express: row 1 is exactly
-two merged cells — "FCU SCHEDULE" spanning A1:F1 and the mirage mark
-spanning G1:N1 (no column lines in between) — followed by the four
+two merged cells — "FCU SCHEDULE" spanning A1:F1 and the user's company
+logo spanning G1:N1 (no column lines in between) — followed by the four
 label/value detail rows (values merged B:F and H:N), a styled column-header
 row, and the data.
 
@@ -12,8 +12,11 @@ same guarantee as the CSV path.
 
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path  # noqa: F401  (used by the logo fallback)
 
+from PIL import Image as PILImage
+from PIL import ImageChops
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as XLImage
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
@@ -35,6 +38,8 @@ _LOGO_COL = 7           # G — first column of the logo zone (1-based)
 _TITLE_ROW_PT = 72      # row 1 height in points (tall header, as in the template)
 _PX_PER_WIDTH = 7       # Excel column-width unit -> pixels
 _PT_TO_PX = 4 / 3
+_LOGO_PAD_PX = 6        # breathing room inside the merged zone
+_LOGO_MAX_UPSCALE = 3.0  # enlarge small logos, but not into a blur
 
 _thin = Side(style="thin", color=GRID)
 _border = Border(left=_thin, right=_thin, top=_thin, bottom=_thin)
@@ -42,20 +47,52 @@ _center = Alignment(horizontal="center", vertical="center", wrap_text=True)
 _left = Alignment(horizontal="left", vertical="center")
 
 
+def _trim_and_load(logo_path: str) -> tuple[BytesIO, int, int]:
+    """Crop the logo's surrounding blank margin and return it as PNG bytes.
+
+    Logo files usually carry padding around the artwork (white border, or
+    transparent margin). Cropping it first is what makes the mark actually
+    read as "filling" the header cell instead of floating in it.
+    """
+    image = PILImage.open(logo_path)
+    image = image.convert("RGBA")
+
+    alpha = image.getchannel("A")
+    bbox = alpha.getbbox() if alpha.getextrema()[0] < 255 else None
+    if bbox is None:  # opaque image: trim the uniform border colour instead
+        rgb = image.convert("RGB")
+        background = PILImage.new("RGB", rgb.size, rgb.getpixel((0, 0)))
+        bbox = ImageChops.difference(rgb, background).getbbox()
+    if bbox:  # None means "entirely uniform" — keep the image as-is
+        image = image.crop(bbox)
+
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    buffer.seek(0)
+    return buffer, image.width, image.height
+
+
 def _place_logo(ws, logo_path: str) -> None:
-    """Embed the user's company logo image centered in the merged G1:N1 cell.
+    """Embed the user's company logo, trimmed and centered, in merged G1:N1.
+
+    Fit is "contain": the logo is scaled to the largest size that fits the
+    cell with its aspect ratio intact — never stretched or cropped, which
+    would deform the brand mark. Small logos are enlarged up to
+    _LOGO_MAX_UPSCALE so they still read at header size.
 
     Falls back to the file name as text if the image cannot be loaded, so a
     bad image never costs the engineer the whole export.
     """
     zone_px = sum(_COL_WIDTHS[_LOGO_COL - 1 :]) * _PX_PER_WIDTH
     row_px = _TITLE_ROW_PT * _PT_TO_PX
-    max_w, max_h = zone_px - 24, row_px - 8
+    max_w = zone_px - 2 * _LOGO_PAD_PX
+    max_h = row_px - 2 * _LOGO_PAD_PX
 
     try:
-        image = XLImage(logo_path)
-        scale = min(max_w / image.width, max_h / image.height, 1.0)
-        width, height = int(image.width * scale), int(image.height * scale)
+        buffer, src_w, src_h = _trim_and_load(logo_path)
+        image = XLImage(buffer)
+        scale = min(max_w / src_w, max_h / src_h, _LOGO_MAX_UPSCALE)
+        width, height = max(1, int(src_w * scale)), max(1, int(src_h * scale))
         image.width, image.height = width, height
         image.anchor = OneCellAnchor(
             _from=AnchorMarker(

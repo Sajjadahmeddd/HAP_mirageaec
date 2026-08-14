@@ -60,9 +60,10 @@ class TitleBar(QFrame):
                 )
             )
         lay.addWidget(logo)
+        # same colour split as the "Mirage AEC" hero on the home page
         brand = QLabel(
-            f'<span style="color:{theme.ORANGE}">M</span>'
-            f'<span style="color:{theme.GREEN}">AEC</span>'
+            f'<span style="color:{theme.TEXT}">M</span>'
+            f'<span style="color:{theme.BLUE}">AEC</span>'
         )
         brand.setObjectName("BrandLabel")
         brand.setTextFormat(Qt.RichText)

@@ -3,3 +3,6 @@ pymupdf>=1.24
 openpyxl>=3.1
 pillow>=10.0
 pytest>=8.0
+
+# build only (packaging the exe / installer - see build/build.md)
+pyinstaller>=6.0

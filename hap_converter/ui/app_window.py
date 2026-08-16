@@ -29,6 +29,9 @@ from hap_converter.engine.pipeline import Result
 
 from . import theme
 from .resources import asset_path
+from .pages.change_progress_page import ChangeProgressPage
+from .pages.change_request_page import ChangeRequestPage
+from .pages.change_review_page import ChangeReviewPage
 from .pages.convert_page import ConvertPage
 from .pages.failure_page import FailurePage
 from .pages.home_page import HomePage
@@ -36,7 +39,7 @@ from .pages.result_page import ResultPage
 from .pages.upload_page import UploadPage
 from .recents import RecentEntry, RecentStore
 from .widgets import label
-from .worker import ConvertWorker
+from .worker import ChangeRequestWorker, ConvertWorker
 
 
 class TitleBar(QFrame):
@@ -150,6 +153,7 @@ class AppWindow(QMainWindow):
         self.output_dir_overridden = False
         self.result: Result | None = None
         self.project_details: dict[str, str] | None = None
+        self.change_xlsx_path: str = ""
         self._worker: ConvertWorker | None = None
         self._cancel_requested = False
 
@@ -172,12 +176,18 @@ class AppWindow(QMainWindow):
         self.convert_page = ConvertPage(self)
         self.result_page = ResultPage(self)
         self.failure_page = FailurePage(self)
+        self.change_request_page = ChangeRequestPage(self)
+        self.change_progress_page = ChangeProgressPage(self)
+        self.change_review_page = ChangeReviewPage(self)
         for page in (
             self.home_page,
             self.upload_page,
             self.convert_page,
             self.result_page,
             self.failure_page,
+            self.change_request_page,
+            self.change_progress_page,
+            self.change_review_page,
         ):
             self.stack.addWidget(page)
         shell_lay.addWidget(self.stack, 1)
@@ -274,6 +284,10 @@ class AppWindow(QMainWindow):
         self.upload_page.refresh()
         self.stack.setCurrentWidget(self.upload_page)
 
+    def go_change_request(self) -> None:
+        self.change_request_page.refresh()
+        self.stack.setCurrentWidget(self.change_request_page)
+
     # ---------------------------------------------------------- state
     def set_pdf(self, path: str | None, pages: int = 0, size_bytes: int = 0) -> None:
         self.pdf_path = path
@@ -308,6 +322,38 @@ class AppWindow(QMainWindow):
         self._worker.progress.connect(self.convert_page.on_progress)
         self._worker.finished_result.connect(self._on_finished)
         self._worker.start()
+
+    def start_change_request(self, xlsx_path: str, pdf_path: str) -> None:
+        """Append a revised PDF's new line items to an existing schedule."""
+        if self._worker is not None:
+            return
+        self._cancel_requested = False
+        self.change_xlsx_path = xlsx_path
+        self.pdf_path = pdf_path
+        self.change_progress_page.begin(xlsx_path, pdf_path)
+        self.stack.setCurrentWidget(self.change_progress_page)
+
+        self._worker = ChangeRequestWorker(
+            xlsx_path, pdf_path, self.staging_dir(), self.config, parent=self
+        )
+        self._worker.progress.connect(self.change_progress_page.on_progress)
+        self._worker.finished_result.connect(self._on_change_finished)
+        self._worker.start()
+
+    def _on_change_finished(self, result) -> None:
+        worker = self._worker
+        self._worker = None
+        if worker is not None:
+            worker.wait()
+
+        self.result = result
+        if result.ok:
+            self.change_progress_page.update_summary(result.stats)
+            self.change_review_page.show_result(result, self.change_xlsx_path)
+            self.stack.setCurrentWidget(self.change_review_page)
+        else:
+            self.failure_page.show_result(result, self.pdf_path or "", self.pdf_size)
+            self.stack.setCurrentWidget(self.failure_page)
 
     def cancel_conversion(self) -> None:
         if self._worker is not None:

@@ -43,12 +43,15 @@ class UploadPage(QWidget):
         radios = QHBoxLayout()
         self.new_project_radio = QRadioButton("New Project")
         self.new_project_radio.setChecked(True)
-        change_request = QRadioButton("Change Request")
-        change_request.setEnabled(False)
-        change_request.setToolTip("Coming soon")
+        self.change_request_radio = QRadioButton("Change Request")
+        self.change_request_radio.setCursor(Qt.PointingHandCursor)
+        self.change_request_radio.setToolTip(
+            "Append a revised PDF to an existing schedule"
+        )
+        self.change_request_radio.clicked.connect(self._ctx.go_change_request)
         radios.addWidget(self.new_project_radio)
         radios.addSpacing(30)
-        radios.addWidget(change_request)
+        radios.addWidget(self.change_request_radio)
         radios.addStretch(1)
         left.addLayout(radios)
 
@@ -179,3 +182,4 @@ class UploadPage(QWidget):
     def refresh(self) -> None:
         self.recents_panel.refresh()
         self._refresh_output_label()
+        self.new_project_radio.setChecked(True)  # returning here = New Project mode

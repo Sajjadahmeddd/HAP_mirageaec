@@ -46,7 +46,7 @@ class ResultPage(QWidget):
         # ---------------- header row
         head = QHBoxLayout()
         head.setSpacing(12)
-        self.title_label = label("CSV Preview", "H2")
+        self.title_label = label("Excel Preview", "H2")
         head.addWidget(self.title_label)
         self.pill = QLabel("COMPLETED")
         self.pill.setObjectName("PillOk")
@@ -71,7 +71,7 @@ class ResultPage(QWidget):
         self.details_btn.setObjectName("Secondary")
         self.details_btn.setCursor(Qt.PointingHandCursor)
         self.details_btn.setToolTip(
-            "Enter the 8 project details that head the downloaded CSV (mandatory)"
+            "Enter the project details that head the downloaded schedule (mandatory)"
         )
         self.details_btn.clicked.connect(self._edit_details)
         head.addWidget(self.details_btn)
@@ -140,7 +140,7 @@ class ResultPage(QWidget):
         self._show_success(result, pdf_path)
 
     def _show_success(self, result: Result, pdf_path: str) -> None:
-        self.title_label.setText("CSV Preview")
+        self.title_label.setText("Excel Preview")
         self.pill.setText("COMPLETED")
         self.pill.setObjectName("PillOk")
         self._repolish(self.pill)

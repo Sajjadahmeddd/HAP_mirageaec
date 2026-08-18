@@ -10,7 +10,7 @@ import os
 from ctypes import wintypes
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QFrame,
@@ -40,6 +40,25 @@ from .pages.upload_page import UploadPage
 from .recents import RecentEntry, RecentStore
 from .widgets import label
 from .worker import ChangeRequestWorker, ConvertWorker
+
+
+class _MONITORINFO(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", wintypes.DWORD),
+        ("rcMonitor", wintypes.RECT),
+        ("rcWork", wintypes.RECT),
+        ("dwFlags", wintypes.DWORD),
+    ]
+
+
+class _MINMAXINFO(ctypes.Structure):
+    _fields_ = [
+        ("ptReserved", wintypes.POINT),
+        ("ptMaxSize", wintypes.POINT),
+        ("ptMaxPosition", wintypes.POINT),
+        ("ptMinTrackSize", wintypes.POINT),
+        ("ptMaxTrackSize", wintypes.POINT),
+    ]
 
 
 class TitleBar(QFrame):
@@ -88,12 +107,17 @@ class TitleBar(QFrame):
                 self._max_btn = btn
 
     def _toggle_maximize(self) -> None:
-        if self._window.isMaximized():
-            self._window.showNormal()
-            self._max_btn.setText("□")
+        window = self._window
+        if window.isMaximized():
+            window.restore_from_maximized()
         else:
-            self._window.showMaximized()
-            self._max_btn.setText("❐")
+            window.remember_normal_geometry()
+            window.showMaximized()
+
+    def sync_maximize_icon(self) -> None:
+        """Keep the glyph correct however the state changed (button, double
+        click, Win+Up, Aero snap)."""
+        self._max_btn.setText("❐" if self._window.isMaximized() else "□")
 
     # window dragging
     def mousePressEvent(self, event) -> None:
@@ -156,6 +180,9 @@ class AppWindow(QMainWindow):
         self.change_xlsx_path: str = ""
         self._worker: ConvertWorker | None = None
         self._cancel_requested = False
+        self._was_maximized = False
+        self._normal_geometry = None
+        self._tracking_suspended = False
 
         self.setWindowTitle("MAEC — HAPExt")
         self.setWindowFlag(Qt.FramelessWindowHint)
@@ -167,7 +194,8 @@ class AppWindow(QMainWindow):
         shell_lay = QVBoxLayout(shell)
         shell_lay.setContentsMargins(0, 0, 0, 0)
         shell_lay.setSpacing(0)
-        shell_lay.addWidget(TitleBar(self))
+        self.title_bar = TitleBar(self)
+        shell_lay.addWidget(self.title_bar)
         shell_lay.addWidget(TabBar(on_hapext=self.go_home))
 
         self.stack = QStackedWidget()
@@ -199,9 +227,11 @@ class AppWindow(QMainWindow):
     #   1. WS_THICKFRAME (+ min/max boxes) added to the native window style,
     #      or Windows will never show resize cursors / start the size loop;
     #   2. WM_NCCALCSIZE answered with "client = whole window" so the frame
-    #      the style would draw stays invisible (inset when maximized so
-    #      content is not pushed off-screen);
-    #   3. WM_NCHITTEST answered with the edge/corner codes.
+    #      the style would draw stays invisible;
+    #   3. WM_GETMINMAXINFO pinned to the monitor work area, so maximizing
+    #      fills the screen exactly - without it Windows sizes a THICKFRAME
+    #      window past the screen edges and the content is clipped;
+    #   4. WM_NCHITTEST answered with the edge/corner codes.
     _RESIZE_BORDER = 8  # px, physical
 
     _WS_BITS = 0x00040000 | 0x00020000 | 0x00010000  # THICKFRAME|MINBOX|MAXBOX
@@ -228,23 +258,121 @@ class AppWindow(QMainWindow):
         # the event loop settles, and re-assert lazily from nativeEvent.
         QTimer.singleShot(0, self._apply_native_style)
 
+    def _fill_minmax_info(self, lparam: int) -> bool:
+        """Answer WM_GETMINMAXINFO with both limits of the window.
+
+        Two things are set here, and both must be, because answering this
+        message stops Qt from applying its own limits to the native resize
+        loop:
+
+        * maximum - pinned to the monitor work area, so maximising fills the
+          screen exactly instead of spilling past its edges;
+        * minimum - dragging an edge is driven by Windows, which only honours
+          ptMinTrackSize. Without it the window can be dragged down to a
+          sliver regardless of Qt's setMinimumSize().
+        """
+        user32 = ctypes.windll.user32
+        mmi = _MINMAXINFO.from_address(lparam)
+
+        # minimum: Qt sizes are logical, ptMinTrackSize is physical pixels
+        ratio = self.devicePixelRatioF()
+        minimum = self.minimumSize()
+        min_w = int(minimum.width() * ratio)
+        min_h = int(minimum.height() * ratio)
+
+        monitor = user32.MonitorFromWindow(int(self.winId()), 2)  # NEAREST
+        info = _MONITORINFO()
+        info.cbSize = ctypes.sizeof(_MONITORINFO)
+        if not user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+            mmi.ptMinTrackSize.x, mmi.ptMinTrackSize.y = min_w, min_h
+            return True
+        work, screen = info.rcWork, info.rcMonitor
+        work_w = work.right - work.left
+        work_h = work.bottom - work.top
+
+        # never demand more room than the screen has: on a small or heavily
+        # scaled laptop our preferred minimum can exceed the work area, and
+        # a window that cannot fit its own minimum is unusable
+        mmi.ptMinTrackSize.x = min(min_w, work_w)
+        mmi.ptMinTrackSize.y = min(min_h, work_h)
+
+        mmi.ptMaxPosition.x = work.left - screen.left
+        mmi.ptMaxPosition.y = work.top - screen.top
+        mmi.ptMaxSize.x = work_w
+        mmi.ptMaxSize.y = work_h
+        mmi.ptMaxTrackSize.x = work_w
+        mmi.ptMaxTrackSize.y = work_h
+        return True
+
+    def remember_normal_geometry(self) -> None:
+        if self._tracking_suspended:
+            return
+        if not self.isMaximized() and not self.isMinimized():
+            self._normal_geometry = self.geometry()
+
+    def restore_from_maximized(self) -> None:
+        """Put the window back to its pre-maximise size.
+
+        After a minimise/restore round trip Qt's own stored "normal"
+        geometry can be the maximised rect, so showNormal() alone leaves
+        the window full-screen sized. The size we recorded is read *first*,
+        because showNormal() emits a resize that would otherwise overwrite
+        it with the maximised rect.
+        """
+        target = self._normal_geometry
+        self._tracking_suspended = True
+        self.showNormal()
+        if target is not None:
+            self.setGeometry(target)
+        QTimer.singleShot(0, self._resume_geometry_tracking)
+
+    def _resume_geometry_tracking(self) -> None:
+        self._tracking_suspended = False
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self.remember_normal_geometry()
+
+    def moveEvent(self, event) -> None:
+        super().moveEvent(event)
+        self.remember_normal_geometry()
+
+    def changeEvent(self, event) -> None:
+        """Keep maximise/restore honest across a minimise.
+
+        Qt maximises a frameless window by resizing it to the work area, so
+        Windows never marks it maximised. Coming back from the taskbar, Qt
+        can hand back the maximised *geometry* while reporting "normal" -
+        the restore button then maximises instead of restoring and the first
+        click looks dead. Remembering the state ourselves fixes that.
+        """
+        super().changeEvent(event)
+        if event.type() != QEvent.WindowStateChange:
+            return
+        came_from_minimised = bool(event.oldState() & Qt.WindowMinimized)
+        if self.isMinimized():
+            pass  # keep whatever _was_maximized already holds
+        elif came_from_minimised:
+            if self._was_maximized and not self.isMaximized():
+                QTimer.singleShot(0, self.showMaximized)
+        else:
+            self._was_maximized = self.isMaximized()
+            self.remember_normal_geometry()
+        self.title_bar.sync_maximize_icon()
+
     def nativeEvent(self, event_type, message):
         if event_type == b"windows_generic_MSG":
             msg = wintypes.MSG.from_address(int(message))
             if msg.message == 0x0084:  # WM_NCHITTEST: keep the style asserted
                 self._apply_native_style()
+            if msg.message == 0x0024:  # WM_GETMINMAXINFO
+                if self._fill_minmax_info(msg.lParam):
+                    return True, 0
             if msg.message == 0x0083 and msg.wParam:  # WM_NCCALCSIZE
-                if self.isMaximized():
-                    user32 = ctypes.windll.user32
-                    pad = user32.GetSystemMetrics(92)  # SM_CXPADDEDBORDER
-                    fx = user32.GetSystemMetrics(32) + pad  # SM_CXSIZEFRAME
-                    fy = user32.GetSystemMetrics(33) + pad  # SM_CYSIZEFRAME
-                    rect = wintypes.RECT.from_address(msg.lParam)
-                    rect.left += fx
-                    rect.top += fy
-                    rect.right -= fx
-                    rect.bottom -= fy
-                return True, 0  # client area = full window (no visible frame)
+                # client area == whole window, maximized or not: the window
+                # itself is already pinned to the work area above, so any
+                # inset here would show as a dead border around the content
+                return True, 0
             if msg.message == 0x0084 and not self.isMaximized():  # WM_NCHITTEST
                 x = ctypes.c_short(msg.lParam & 0xFFFF).value
                 y = ctypes.c_short((msg.lParam >> 16) & 0xFFFF).value

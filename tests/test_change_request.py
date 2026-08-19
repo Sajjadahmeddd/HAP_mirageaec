@@ -1,7 +1,6 @@
 import openpyxl
 import pytest
 from PIL import Image
-
 from hap_converter.engine import change_request, pipeline
 from hap_converter.engine.xlsx_exporter import write_fcu_xlsx
 

@@ -45,6 +45,10 @@ _thin = Side(style="thin", color=GRID)
 _border = Border(left=_thin, right=_thin, top=_thin, bottom=_thin)
 _center = Alignment(horizontal="center", vertical="center", wrap_text=True)
 _left = Alignment(horizontal="left", vertical="center")
+# space-row names are stepped in under their unit header (Excel-native
+# indent: formatting only, the cell value stays the exact PDF string)
+SPACE_NAME_INDENT = 3
+_indented = Alignment(horizontal="left", vertical="center", indent=SPACE_NAME_INDENT)
 
 
 def _trim_and_load(logo_path: str) -> tuple[BytesIO, int, int]:
@@ -166,11 +170,13 @@ def write_fcu_xlsx(
     ws.row_dimensions[6].height = 32
 
     # ---- data ------------------------------------------------------------
+    # unit header rows start flush left; sub-space names are indented
     for r, row_values in enumerate(data_rows, start=7):
+        is_unit_row = len(row_values) > 2 and str(row_values[2]).strip()
         for col, value in enumerate(row_values, start=1):
             cell = ws.cell(row=r, column=col, value=value)
             cell.border = _border
-            cell.alignment = _left
+            cell.alignment = _indented if (col == 1 and not is_unit_row) else _left
 
     for col, width in enumerate(_COL_WIDTHS, start=1):
         ws.column_dimensions[get_column_letter(col)].width = width

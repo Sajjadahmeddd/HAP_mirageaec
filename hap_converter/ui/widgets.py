@@ -330,8 +330,14 @@ class PreviewTable(QTableWidget):
         self.setHorizontalHeaderLabels(header)
         self.setRowCount(len(rows))
         for r, row in enumerate(rows):
+            # sub-space names are stepped in, like the Excel output
+            # (display only - the underlying value is untouched)
+            is_unit_row = len(row) > 2 and str(row[2]).strip()
             for c, value in enumerate(row):
-                item = QTableWidgetItem(value if value else "—")
+                shown = value if value else "—"
+                if c == 0 and value and not is_unit_row:
+                    shown = "      " + value
+                item = QTableWidgetItem(shown)
                 if not value:
                     item.setForeground(Qt.gray)
                 self.setItem(r, c, item)

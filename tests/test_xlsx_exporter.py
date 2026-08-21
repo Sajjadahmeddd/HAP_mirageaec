@@ -119,3 +119,15 @@ def test_header_and_data_rows(tmp_path, DETAILS):
     assert ws["B7"].value == "178.2"  # string-exact, zero rounding
     assert ws["E8"].value == "689"
     assert ws.cell(row=7, column=5).value in ("", None)  # blanks stay blank
+
+
+def test_space_row_names_indented_unit_rows_flush_left(tmp_path, DETAILS):
+    ws = _load(tmp_path, DETAILS)
+    # row 7 = unit header row -> flush left, no indent
+    assert (ws.cell(row=7, column=1).alignment.indent or 0) == 0
+    # row 8 = space row -> stepped in via Excel-native indent
+    assert ws.cell(row=8, column=1).alignment.indent == 3
+    # indent is formatting only: the value stays the exact string
+    assert ws.cell(row=8, column=1).value == "#01-Corridor"
+    # other columns of the space row are not indented
+    assert (ws.cell(row=8, column=2).alignment.indent or 0) == 0

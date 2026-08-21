@@ -152,3 +152,13 @@ def test_pipeline_rejects_bad_pdf_without_touching_excel(existing_xlsx, bad_pdf,
     assert not result.ok
     assert list(out_dir.iterdir()) == []          # nothing written
     assert any("Missing value" in i.description for i in result.issues)
+
+
+def test_appended_rows_follow_indent_convention(existing_xlsx, tmp_path, config):
+    schedule = change_request.load_schedule(existing_xlsx, config)
+    blocks = [[unit_row("#04-New"), space_row("#04-New-sub")]]
+    out = change_request.append_blocks(schedule, blocks, tmp_path / "indent.xlsx")
+    ws = openpyxl.load_workbook(out).active
+    assert (ws.cell(row=11, column=1).alignment.indent or 0) == 0  # appended unit row
+    assert ws.cell(row=12, column=1).alignment.indent == 3         # appended space row
+    assert ws.cell(row=12, column=1).value == "#04-New-sub"        # value untouched

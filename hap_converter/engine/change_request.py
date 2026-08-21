@@ -24,9 +24,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import openpyxl
-from openpyxl.styles import Font, PatternFill
+from openpyxl.styles import Alignment, Font, PatternFill
 
 from .config import Config
+from .xlsx_exporter import SPACE_NAME_INDENT
 
 TITLE_CELL = "A1"
 TITLE_TEXT = "FCU SCHEDULE"
@@ -167,11 +168,21 @@ def append_blocks(
 
     for block in blocks:
         for values in block:
+            is_unit_row = bool(values[_UNIT_COL].strip())
             for col, value in enumerate(values, start=1):
                 cell = sheet.cell(row=row_index, column=col, value=value)
                 source = sheet.cell(row=template_row, column=col)
                 cell.border = copy(source.border)
-                cell.alignment = copy(source.alignment)
+                if col == 1:
+                    # don't copy the template's indent: set it by row type,
+                    # matching the writer (units flush left, spaces stepped in)
+                    cell.alignment = Alignment(
+                        horizontal="left",
+                        vertical="center",
+                        indent=0 if is_unit_row else SPACE_NAME_INDENT,
+                    )
+                else:
+                    cell.alignment = copy(source.alignment)
                 if mark_new:
                     cell.fill = fill
             if mark_new and values is block[0]:

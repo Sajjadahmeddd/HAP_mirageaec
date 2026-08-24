@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "input_columns": {
+    "name": "Zone Name / Space Name",
+    "floor_area": "Floor Area (m²)",
+    "total_coil": "Total Coil Load (KW)",
+    "sens_coil": "Sens Coil Load (KW)",
+    "air_flow": "Air Flow (L/s)"
+  },
+  "inputs": [
+    {"key": "no_of_outlets",  "label": "Number of Air Outlet",    "unit": "",     "kind": "count"},
+    {"key": "velocity",       "label": "Neck/Face Velocity",      "unit": "m/s",  "options": ["1.9", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5"]},
+    {"key": "nc",             "label": "Noise Criteria",          "unit": "dB",   "options": ["15", "20", "25"]},
+    {"key": "slot_width",     "label": "Slot Width",              "unit": "mm",   "options": []},
+    {"key": "no_of_slots",    "label": "Number of Slot",          "unit": "",     "options": ["1", "2", "3", "4"]},
+    {"key": "grille_height",  "label": "Height of Grill",         "unit": "mm",   "options": ["50", "100", "150", "200"]},
+    {"key": "bar_pitch",      "label": "Bar Pitch",               "unit": "mm",   "options": ["6", "12.5"]},
+    {"key": "deflection",     "label": "Deflection Angle",        "unit": "°",    "options": ["0", "15"]}
+  ],
+  "diffuser_types": [
+    {"key": "linear_slot", "label": "Linear Slot Diffuser",  "group": "A", "catalog": "linear_slot.json", "diagram": "linear_slot.png",
+     "inputs": ["nc", "slot_width", "no_of_slots"],
+     "options": {"slot_width": ["16", "20", "25"]}},
+    {"key": "linear_bar",  "label": "Linear Bar Grille",     "group": "A", "catalog": "linear_bar.json",  "diagram": "linear_bar.png",
+     "inputs": ["velocity", "nc", "grille_height", "bar_pitch"]},
+    {"key": "flow_bar",    "label": "Flow Bar",              "group": "A", "catalog": "flow_bar.json",    "diagram": "flow_bar.png",
+     "inputs": ["velocity", "nc", "slot_width", "no_of_slots"],
+     "options": {"slot_width": ["20", "25", "38", "51", "76"]}},
+    {"key": "square",      "label": "Square (Ceiling) Diffuser", "group": "B", "catalog": "square.json", "diagram": "square.png",
+     "inputs": ["no_of_outlets", "velocity", "nc"]},
+    {"key": "grille",      "label": "Grille & Registers",    "group": "B", "catalog": "grille.json",      "diagram": "grille.png",
+     "inputs": ["no_of_outlets", "velocity", "nc", "deflection"]}
+  ],
+  "parameters": {
+    "_comment": "Unconfirmed rules from the brief (section 8). Change here, not in code.",
+    "nc_rule": "cap_lsm_by_nc",
+    "_nc_rule_TODO": "cap_lsm_by_nc: the selected Noise Criteria caps the L/s/m column (highest L/s/m whose NC <= limit; linear interpolation between the bracketing columns when NC falls between them). Alternative 'report_only' is not implemented until confirmed.",
+    "nc_less_than_policy": "as_value",
+    "_nc_less_than_TODO": "How to read catalogue NC values printed as '<20': 'as_value' treats them as 20.",
+    "throw_output": "mid",
+    "_throw_output_TODO": "Which of the three throw values (Vt 0.75 / 0.50 / 0.25 m/s) is 'the' Flow Throw output: min | mid | max. Tables with two values (grilles) use min/max; 'mid' falls back to the mean of the two.",
+    "apply_length_correction": true,
+    "length_correction_basis": "total",
+    "_length_correction_TODO": "Whether the catalogue length correction is applied, and to what length: 'total' = the derived air-outlet length, 'piece' = one standard piece length.",
+    "flow_bar_slots_multiply_lsm": true,
+    "_flow_bar_TODO": "Flow Bar: multiply the table L/s/m by the number of slots (parallel slots share the airflow).",
+    "decimals": {"lsm": 2, "length_m": 2, "throw_m": 2, "velocity": 2}
+  },
+  "result_columns": [
+    {"key": "name",        "label": "Zone Name / Space Name", "default": true,  "locked": true},
+    {"key": "floor_area",  "label": "Floor Area (m²)",        "default": true},
+    {"key": "total_coil",  "label": "Total Coil Load (KW)",   "default": true},
+    {"key": "sens_coil",   "label": "Sens Coil Load (KW)",    "default": false},
+    {"key": "air_flow",    "label": "Air Flow (L/s)",         "default": true},
+    {"key": "diffuser",    "label": "Diffuser Type",          "default": false},
+    {"key": "lsm",         "label": "Air Flow (L/s/m)",       "default": true},
+    {"key": "length",      "label": "Air Outlet Length (m) / Nos", "default": true},
+    {"key": "throw",       "label": "Flow Throw (m)",         "default": false},
+    {"key": "size",        "label": "Output (mm x mm)",       "default": false},
+    {"key": "nc_out",      "label": "NC",                     "default": false},
+    {"key": "velocity_out","label": "Velocity (m/s)",         "default": false},
+    {"key": "pt",          "label": "Pt (Pa)",                "default": false},
+    {"key": "interpolated","label": "Interpolated",           "default": false},
+    {"key": "status",      "label": "Status",                 "default": false}
+  ]
+}

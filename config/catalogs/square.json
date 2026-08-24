@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "key": "square",
+  "group": "B",
+  "title": "TECNALCO Ceiling Diffusers - Square core",
+  "source": "Square diffusers catalogue.pdf - selection tables, square core 4-way discharge p.25",
+  "notes": [
+    "Cells are transcribed verbatim, keyed by air flow (L/s): [neck velocity (m/s), 'min-mid-max throw (m)', 'NC', velocity pressure Pt (Pa)].",
+    "The catalogue table has neck size rows and neck-velocity columns; each cell publishes the L/s. It is stored here in the same shape as the grille table (size -> flow -> cell) so one lookup serves both.",
+    "Throw min/mid/max correspond to terminal velocities 0.75 / 0.50 / 0.25 m/s; the diffuser is placed near the ceiling (x0.6-0.75 on an exposed duct).",
+    "375 x 375 @ 3.5 m/s: catalogue prints throw '7.6-13.7' (mid missing); the 3-way table (p.24, Tx) prints 7.6-9.1-13.7 for the same cell and that value is used.",
+    "450 x 450 @ 3.5 m/s: catalogue prints 908 L/s (both the 3-way and 4-way tables) - kept verbatim.",
+    "TODO(open): only the square-core 4-way table is transcribed (the spec has no discharge-pattern input). 1/2/3-way and rectangular-core tables can be added as further tables with a 'discharge' match key."
+  ],
+  "outlets_input": "no_of_outlets",
+  "table_inputs": [],
+  "tables": [
+    {
+      "match": {},
+      "title": "Square core - 4 way discharge (p.25)",
+      "columns": [
+        {"sizes": ["150 x 150"], "cells": {
+          "23": [1.0, "1.0-1.5-2.5", "<15", 6], "34": [1.5, "1.9-2.1-3.0", "<15", 13], "45": [2.0, "1.8-2.4-4.0", "18", 23], "56": [2.5, "2.1-3.0-4.3", "23", 36], "68": [3.0, "2.4-3.4-4.6", "29", 53], "79": [3.5, "2.7-3.7-4.9", "35", 72]}},
+        {"sizes": ["225 x 225"], "cells": {
+          "51": [1.0, "2.4-3.0-4.3", "<15", 6], "76": [1.5, "2.9-3.7-5.2", "<15", 13], "101": [2.0, "3.4-4.3-6.0", "18", 23], "127": [2.5, "3.8-4.5-6.7", "24", 36], "152": [3.0, "4.4-5.2-7.6", "29", 53], "177": [3.5, "4.6-5.5-8.0", "34", 72]}},
+        {"sizes": ["300 x 300"], "cells": {
+          "90": [1.0, "2.7-4.0-5.8", "<15", 6], "135": [1.5, "4.3-5.0-7.0", "<15", 13], "180": [2.0, "4.9-6.1-8.2", "24", 23], "225": [2.5, "5.2-6.4-9.4", "31", 36], "270": [3.0, "5.8-7.0-10.0", "36", 53], "315": [3.5, "6.1-7.6-11.0", "41", 73]}},
+        {"sizes": ["375 x 375"], "cells": {
+          "141": [1.0, "3.5-4.9-7.0", "<15", 6], "211": [1.5, "4.9-6.1-8.5", "23", 13], "281": [2.0, "5.6-7.0-9.8", "31", 23], "352": [2.5, "6.4-7.9-11.3", "37", 37], "422": [3.0, "7.0-8.5-12.2", "43", 54], "492": [3.5, "7.6-9.1-13.7", "47", 74]}},
+        {"sizes": ["450 x 450"], "cells": {
+          "203": [1.0, "4.3-5.8-8.2", "<15", 6], "304": [1.5, "5.8-7.3-10.4", "28", 13], "405": [2.0, "7.0-8.5-11.9", "35", 24], "506": [2.5, "7.6-9.4-13.4", "42", 37], "607": [3.0, "8.2-10.4-14.6", "47", 54], "908": [3.5, "8.8-11.0-15.8", "52", 74]}},
+        {"sizes": ["525 x 525"], "cells": {
+          "276": [1.0, "4.6-6.7-9.8", "19", 6], "413": [1.5, "6.7-8.5-11.9", "31", 14], "551": [2.0, "7.9-9.8-14.0", "37", 24], "689": [2.5, "9.1-11.0-15.5", "44", 38], "827": [3.0, "9.8-11.9-17.1", "49", 55], "965": [3.5, "10.7-13.1-18.3", "54", 75]}},
+        {"sizes": ["600 x 600"], "cells": {
+          "360": [1.0, "5.5-7.9-11.3", "22", 6], "540": [1.5, "7.9-9.8-13.7", "33", 14], "720": [2.0, "9.1-11.3-15.8", "40", 25], "900": [2.5, "10.4-12.8-18.0", "46", 39], "1080": [3.0, "11.3-13.7-18.8", "51", 56], "1260": [3.5, "12.2-14.6-21.0", "56", 76]}}
+      ]
+    }
+  ]
+}

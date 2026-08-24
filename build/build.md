@@ -13,6 +13,9 @@ Requires Inno Setup 6 (installed at
 .\.venv\Scripts\pyinstaller --noconfirm --onedir --windowed `
     --name MAEC_HAPExt --icon "build\app.ico" `
     --add-data "config\mapping.json;." `
+    --add-data "config\input_matrix.json;." `
+    --add-data "config\catalogs;catalogs" `
+    --add-data "config\diagrams;diagrams" `
     --add-data "hap_converter\ui\assets;assets" `
     --distpath "build\app" run_app.py
 
@@ -63,7 +66,11 @@ Portable, no installation at all, but slow to start. Build command
 ```powershell
 .\.venv\Scripts\python -m pip install pyinstaller
 .\.venv\Scripts\pyinstaller --noconfirm --onefile --windowed `
-    --name MAEC_HAPExt --add-data "config\mapping.json;." `
+    --name MAEC_HAPExt `
+    --add-data "config\mapping.json;." `
+    --add-data "config\input_matrix.json;." `
+    --add-data "config\catalogs;catalogs" `
+    --add-data "config\diagrams;diagrams" `
     --add-data "hap_converter\ui\assets;assets" run_app.py
 ```
 
@@ -71,10 +78,15 @@ Notes:
 
 - `run_app.py` is the top-level entry point (so the `hap_converter`
   package resolves inside the bundle).
-- `mapping.json` is bundled INTO the exe, so the single file is fully
-  self-contained. If a `mapping.json` is placed NEXT to the exe, it
-  overrides the bundled one (user-editable config without rebuilding) —
-  see `main.default_config_path`.
+- `mapping.json` (HAPExt) and `input_matrix.json` + `catalogs/` +
+  `diagrams/` (AirSizer Pro) are bundled INTO the exe, so the single
+  file is fully self-contained. Placing any of them NEXT to the exe
+  overrides the bundled copy (user-editable config without rebuilding)
+  — see `main._resolve_config`. Each file resolves independently; an
+  `input_matrix.json` beside the exe reads its `catalogs/` and
+  `diagrams/` from beside the exe too.
+- If the AirSizer config cannot be loaded the app still starts: the
+  AirSizer Pro tab is disabled and its tooltip carries the reason.
 - First launch is slow (~10 s): the one-file exe unpacks itself to a temp
   folder. Subsequent launches are faster.
 - To add an icon later: `--icon app.ico`.

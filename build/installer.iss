@@ -10,7 +10,7 @@
 ; Output: dist\MAEC_HAPExt_Setup_v1.0.exe
 
 #define AppName "MAEC HAPExt"
-#define AppVersion "1.1"
+#define AppVersion "1.2"
 #define AppPublisher "Mirage AEC"
 #define AppExeName "MAEC_HAPExt.exe"
 

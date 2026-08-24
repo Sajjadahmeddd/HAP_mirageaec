@@ -13,10 +13,12 @@ from pathlib import Path
 from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -24,6 +26,12 @@ from PySide6.QtWidgets import (
 )
 
 from hap_converter import __version__
+from hap_converter.airsizer.engine import pipeline as air_pipeline
+from hap_converter.airsizer.engine import project as air_project
+from hap_converter.airsizer.engine.project import Project as AirProject
+from hap_converter.airsizer.ui.home_page import AirHomePage
+from hap_converter.airsizer.ui.review_page import ReviewPage
+from hap_converter.airsizer.ui.wizard_page import WizardPage
 from hap_converter.engine.config import Config
 from hap_converter.engine.pipeline import Result
 
@@ -136,38 +144,70 @@ class TitleBar(QFrame):
 
 
 class TabBar(QFrame):
-    def __init__(self, on_hapext=None):
+    """The product switcher. `handlers` maps a tab name to what it opens;
+    a tab with no handler stays disabled and reads "Coming soon"."""
+
+    def __init__(self, handlers: dict | None = None):
         super().__init__()
         self.setObjectName("TabBar")
+        handlers = handlers or {}
+        self._buttons: dict[str, QPushButton] = {}
+
         lay = QHBoxLayout(self)
         lay.setContentsMargins(10, 0, 10, 0)
         lay.setSpacing(4)
-        for name, active, enabled in (
-            ("HAPExt", True, True),
-            ("AirSizer Pro", False, False),
-            ("HAPAudit", False, False),
+        for name, tip in (
+            ("HAPExt", "Go to the HAPExt home screen"),
+            ("AirSizer Pro", "Go to the AirSizer Pro home screen"),
+            ("HAPAudit", ""),
         ):
             btn = QPushButton(name)
             btn.setProperty("tabRole", "tab")
-            btn.setProperty("tabActive", "true" if active else "false")
-            btn.setEnabled(enabled)
-            if enabled and on_hapext:
+            btn.setProperty("tabActive", "false")
+            handler = handlers.get(name)
+            btn.setEnabled(handler is not None)
+            if handler is not None:
                 btn.setCursor(Qt.PointingHandCursor)
-                btn.setToolTip("Go to the HAPExt home screen")
-                btn.clicked.connect(on_hapext)
-            if not enabled:
+                btn.setToolTip(tip)
+                btn.clicked.connect(handler)
+            else:
                 btn.setToolTip("Coming soon")
+            self._buttons[name] = btn
             lay.addWidget(btn)
         lay.addStretch(1)
+        self.set_active("HAPExt")
+
+    def set_active(self, name: str) -> None:
+        for tab_name, btn in self._buttons.items():
+            btn.setProperty("tabActive", "true" if tab_name == name else "false")
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+
+    def disable(self, name: str, reason: str) -> None:
+        btn = self._buttons.get(name)
+        if btn is not None:
+            btn.setEnabled(False)
+            btn.setToolTip(reason)
 
 
 class AppWindow(QMainWindow):
     """The `ctx` object passed to every page: navigation + shared state."""
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, air_config=None, air_error: str = ""):
         super().__init__()
         self.config = config
         self.recents = RecentStore()
+
+        # AirSizer Pro (module 2) state. air_config is None when its config
+        # could not be loaded; the tab is then disabled with the reason.
+        self.air_config = air_config
+        self.air_error = air_error
+        self.air_spaces: list = []
+        self.air_inputs: dict = {}
+        self.air_results: dict = {}
+        self.air_source_path: str = ""
+        self.air_visible_columns: list[str] | None = None
+        self.air_project = AirProject()
 
         # shared conversion state
         self.pdf_path: str | None = None
@@ -184,10 +224,10 @@ class AppWindow(QMainWindow):
         self._normal_geometry = None
         self._tracking_suspended = False
 
-        self.setWindowTitle("MAEC — HAPExt")
+        self.setWindowTitle("MAEC")
         self.setWindowFlag(Qt.FramelessWindowHint)
         self.setMinimumSize(1120, 700)
-        self.setStyleSheet(theme.APP_QSS)
+        self.setStyleSheet(theme.APP_QSS + theme.AIRSIZER_QSS)
 
         shell = QWidget()
         shell.setObjectName("Canvas")
@@ -196,7 +236,15 @@ class AppWindow(QMainWindow):
         shell_lay.setSpacing(0)
         self.title_bar = TitleBar(self)
         shell_lay.addWidget(self.title_bar)
-        shell_lay.addWidget(TabBar(on_hapext=self.go_home))
+        self.tab_bar = TabBar(
+            {
+                "HAPExt": self.go_home,
+                "AirSizer Pro": self.go_airsizer if air_config else None,
+            }
+        )
+        if air_config is None and air_error:
+            self.tab_bar.disable("AirSizer Pro", air_error)
+        shell_lay.addWidget(self.tab_bar)
 
         self.stack = QStackedWidget()
         self.home_page = HomePage(self)
@@ -207,7 +255,7 @@ class AppWindow(QMainWindow):
         self.change_request_page = ChangeRequestPage(self)
         self.change_progress_page = ChangeProgressPage(self)
         self.change_review_page = ChangeReviewPage(self)
-        for page in (
+        pages = [
             self.home_page,
             self.upload_page,
             self.convert_page,
@@ -216,7 +264,13 @@ class AppWindow(QMainWindow):
             self.change_request_page,
             self.change_progress_page,
             self.change_review_page,
-        ):
+        ]
+        if air_config is not None:
+            self.air_home_page = AirHomePage(self)
+            self.air_wizard_page = WizardPage(self)
+            self.air_review_page = ReviewPage(self)
+            pages += [self.air_home_page, self.air_wizard_page, self.air_review_page]
+        for page in pages:
             self.stack.addWidget(page)
         shell_lay.addWidget(self.stack, 1)
         self.setCentralWidget(shell)
@@ -405,16 +459,142 @@ class AppWindow(QMainWindow):
 
     # ---------------------------------------------------------- navigation
     def go_home(self) -> None:
+        self.tab_bar.set_active("HAPExt")
         self.home_page.refresh()
         self.stack.setCurrentWidget(self.home_page)
 
     def go_upload(self) -> None:
+        self.tab_bar.set_active("HAPExt")
         self.upload_page.refresh()
         self.stack.setCurrentWidget(self.upload_page)
 
     def go_change_request(self) -> None:
+        self.tab_bar.set_active("HAPExt")
         self.change_request_page.refresh()
         self.stack.setCurrentWidget(self.change_request_page)
+
+    # ------------------------------------------------------- AirSizer Pro
+    def go_airsizer(self) -> None:
+        self.tab_bar.set_active("AirSizer Pro")
+        self.air_home_page.refresh()
+        self.stack.setCurrentWidget(self.air_home_page)
+
+    def go_air_wizard(self) -> None:
+        self.tab_bar.set_active("AirSizer Pro")
+        self.air_wizard_page.refresh()
+        self.stack.setCurrentWidget(self.air_wizard_page)
+
+    def go_air_review(self) -> None:
+        if not self.air_spaces:
+            return
+        self.tab_bar.set_active("AirSizer Pro")
+        self.air_review_page.set_stage(3)
+        self.stack.setCurrentWidget(self.air_review_page)
+
+    @staticmethod
+    def air_staging_dir() -> str:
+        """Where a generated sizing workbook waits until it is downloaded."""
+        base = os.environ.get("LOCALAPPDATA") or str(Path.home())
+        path = Path(base) / "MAEC" / "airsizer"
+        path.mkdir(parents=True, exist_ok=True)
+        return str(path)
+
+    def _default_air_columns(self) -> list[str]:
+        return [c.key for c in self.air_config.result_columns if c.default]
+
+    def open_air_schedule(self) -> None:
+        """Pick the schedule HAPExt produced and start a sizing session."""
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select the HAPExt schedule",
+            "",
+            "HAPExt schedule (*.xlsx *.csv)",
+        )
+        if not path:
+            return
+        self.load_air_schedule(path)
+
+    def load_air_schedule(self, path: str) -> bool:
+        try:
+            spaces = air_pipeline.load_spaces(path, self.air_config)
+        except air_pipeline.SourceError as exc:
+            QMessageBox.critical(self, "Could not read the schedule", str(exc))
+            return False
+        self.air_spaces = spaces
+        self.air_source_path = path
+        self.air_inputs = {}
+        self.air_results = {}
+        self.air_visible_columns = self._default_air_columns()
+        self.air_project = AirProject(
+            name=Path(path).stem, source_path=path,
+            visible_columns=list(self.air_visible_columns),
+        )
+        self.go_air_wizard()
+        return True
+
+    def record_sizing(self, row: int, sizing_input, result) -> None:
+        """One subspace has been sized and saved in the panel."""
+        self.air_inputs[row] = sizing_input
+        self.air_results[row] = result
+
+    def open_air_sizing(self, row: int) -> None:
+        self.air_wizard_page.open_sizing(row)
+        self.air_review_page.refresh()
+
+    def save_air_project(self) -> None:
+        if not self.air_spaces:
+            return
+        suggested = Path(air_project.default_dir()) / f"{self.air_project.name}.json"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save sizing project", str(suggested), "AirSizer project (*.json)"
+        )
+        if not path:
+            return
+        self.air_project.source_path = self.air_source_path
+        self.air_project.visible_columns = list(
+            self.air_visible_columns or self._default_air_columns()
+        )
+        self.air_project.sizings = {}
+        for row, sizing_input in self.air_inputs.items():
+            self.air_project.set_sizing(row, sizing_input)
+        try:
+            saved = air_project.save(self.air_project, path)
+        except OSError as exc:
+            QMessageBox.critical(self, "Save failed", str(exc))
+            return
+        air_project.RecentProjects().add(self.air_project)
+        QMessageBox.information(self, "Saved", f"Sizing project saved to:\n{saved}")
+
+    def open_air_project(self, path: str) -> None:
+        """Reopen a saved session: reload its schedule, then re-size every row."""
+        try:
+            project = air_project.load(path)
+        except (OSError, ValueError) as exc:
+            QMessageBox.critical(self, "Could not open project", str(exc))
+            return
+        if not project.source_path or not Path(project.source_path).is_file():
+            QMessageBox.critical(
+                self,
+                "Schedule missing",
+                "The schedule this project was built from is no longer at:\n"
+                f"{project.source_path or '(not recorded)'}",
+            )
+            return
+        if not self.load_air_schedule(project.source_path):
+            return
+
+        self.air_project = project
+        if project.visible_columns:
+            self.air_visible_columns = list(project.visible_columns)
+        for space in self.air_spaces:
+            saved_input = project.sizing_for(space.row)
+            if saved_input is None:
+                continue
+            self.air_inputs[space.row] = saved_input
+            self.air_results[space.row] = air_pipeline.size_space(
+                space, saved_input, self.air_config
+            )
+        self.go_air_wizard()
 
     # ---------------------------------------------------------- state
     def set_pdf(self, path: str | None, pages: int = 0, size_bytes: int = 0) -> None:

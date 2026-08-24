@@ -405,3 +405,181 @@ QMessageBox QPushButton:hover {{ background: {GREEN_DARK}; }}
 }}
 #IssueText {{ font-size: 12px; color: {TEXT}; }}
 """
+
+
+# ---------------------------------------------------------------------------
+# AirSizer Pro. Kept as its own sheet so module 2 can restyle without any risk
+# to the shipped HAPExt screens; AppWindow concatenates the two.
+AIRSIZER_QSS = f"""
+/* ---------- wizard step chips ---------- */
+QLabel#WizardStep {{
+    background: #E7E9E4;
+    color: #6B6E78;
+    border-radius: 15px;
+    padding: 9px 22px;
+    font-size: 11px;
+    font-weight: 700;
+}}
+QLabel#WizardStep[stepState="active"] {{
+    background: {NAVY};
+    color: white;
+}}
+QLabel#WizardStep[stepState="done"] {{
+    background: {NAVY};
+    color: white;
+}}
+#StepLine {{
+    background: {BORDER};
+    max-height: 1px;
+    min-height: 1px;
+}}
+
+/* ---------- table row action ---------- */
+QPushButton#RowAction {{
+    background: {GREEN};
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 4px 18px;
+    font-size: 10px;
+    font-weight: 700;
+}}
+QPushButton#RowAction:hover {{ background: {GREEN_DARK}; }}
+QPushButton#RowAction[rowDone="true"] {{ background: {GREEN_DARK}; }}
+
+/* ---------- column picker ---------- */
+QToolButton#ColumnPicker {{
+    background: transparent;
+    border: none;
+    color: #9B9EA8;
+    font-size: 15px;
+    font-weight: 800;
+    padding: 2px 6px;
+}}
+QToolButton#ColumnPicker:hover {{ color: {NAVY}; }}
+QMenu {{
+    background: {CARD};
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+    padding: 6px;
+    font-size: 12px;
+}}
+QMenu::item {{ padding: 6px 26px 6px 24px; border-radius: 6px; }}
+QMenu::item:selected {{ background: {GREEN_SOFT}; color: {GREEN_DARK}; }}
+
+/* ---------- sizing panel ---------- */
+#SizingPanel {{
+    background: #D9D9D6;
+    border: 1px solid #C9C9C2;
+    border-radius: 14px;
+}}
+#SizingSide {{
+    background: #C9C9C6;
+    border-radius: 14px;
+}}
+#SizingLabel {{ font-size: 12px; font-weight: 700; }}
+#FieldCaption {{ font-size: 11px; font-weight: 700; color: {TEXT}; }}
+#ReadOnlyField {{
+    background: #ECECEA;
+    border: 1px solid #C9C9C2;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: {TEXT};
+}}
+#OutputField {{
+    background: #ECECEA;
+    border: 1px solid #C9C9C2;
+    border-radius: 8px;
+    padding: 9px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    color: {TEXT};
+}}
+#OutputField[outputState="pending"] {{ color: {TEXT_MUTED}; font-weight: 600; }}
+#OutputField[outputState="na"] {{ color: #A0A3AC; font-weight: 600; }}
+#OutputField[outputState="value"] {{ color: {TEXT}; }}
+#OutputField[outputState="interpolated"] {{
+    background: #FBEFD3;
+    border-color: #E3C989;
+    color: #7A5B12;
+}}
+#DiagramFrame {{
+    background: white;
+    border: 1px solid #C9C9C2;
+    border-radius: 10px;
+}}
+QPushButton#SizingAction {{
+    background: {GREEN};
+    color: white;
+    border: none;
+    border-radius: 22px;
+    padding: 12px 46px;
+    font-size: 17px;
+    font-weight: 800;
+}}
+QPushButton#SizingAction:hover {{ background: {GREEN_DARK}; }}
+QPushButton#SizingAction:disabled {{ background: #B8BEA8; color: #EFEFEA; }}
+QPushButton#CloseAction {{
+    background: #7A4A44;
+    color: white;
+    border: none;
+    border-radius: 19px;
+    padding: 10px 34px;
+    font-size: 13px;
+    font-weight: 700;
+}}
+QPushButton#CloseAction:hover {{ background: #663C37; }}
+
+/* ---------- combo boxes (sizing form) ---------- */
+QComboBox {{
+    background: white;
+    color: {TEXT};
+    border: 1px solid #C9C9C2;
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 12px;
+}}
+QComboBox:disabled {{
+    background: #ECECEA;
+    color: #A0A3AC;
+}}
+QComboBox:focus {{ border-color: {GREEN}; }}
+QComboBox::drop-down {{ border: none; width: 22px; }}
+QComboBox QAbstractItemView {{
+    background: white;
+    color: {TEXT};
+    border: 1px solid {BORDER};
+    selection-background-color: {GREEN_SOFT};
+    selection-color: {GREEN_DARK};
+    outline: none;
+}}
+QLineEdit:disabled {{ background: #ECECEA; color: #A0A3AC; }}
+
+/* ---------- banners ---------- */
+#InterpBanner {{
+    background: #FBEFD3;
+    border: 1px solid #E3C989;
+    border-radius: 10px;
+}}
+#InterpBannerText {{ color: #7A5B12; font-size: 11px; font-weight: 700; }}
+#FailBanner {{
+    background: {RED_SOFT};
+    border: 1px solid #F5C6C6;
+    border-radius: 10px;
+}}
+#FailBannerText {{ color: {RED}; font-size: 11px; font-weight: 700; }}
+
+/* ---------- quick start ---------- */
+#QuickIcon {{
+    background: {GREEN_SOFT};
+    border: 1px solid #D5DFBE;
+    border-radius: 12px;
+    font-size: 20px;
+}}
+#HelpCard {{
+    background: #F4F7EC;
+    border: 1px solid #DCE5C6;
+    border-radius: 12px;
+}}
+"""

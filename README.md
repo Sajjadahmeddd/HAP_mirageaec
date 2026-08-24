@@ -1,9 +1,16 @@
-# HAP PDF-to-CSV Converter (Phase 1)
+# MAEC — HAPExt + AirSizer Pro
 
-Standalone Windows desktop tool that converts one merged Carrier HAP
-"System Design" PDF (200–1000+ pages) into one structured CSV. Offline,
-single user, no admin install. See `HAP_Phase1_Implementation_Brief.md`
-for the full spec.
+Standalone Windows desktop suite. Two modules share one window, one build
+and one engine discipline.
+
+- **HAPExt** (module 1) converts one merged Carrier HAP
+  "System Design" PDF (200-1000+ pages) into one structured FCU schedule
+  (Excel/CSV), and appends revised PDFs to an existing schedule.
+- **AirSizer Pro** (module 2) reads that schedule and sizes a TECNALCO
+  diffuser per subspace from the manufacturer catalogs.
+
+Offline, single user, no admin install. See
+`HAP_Phase1_Implementation_Brief.md` for the module 1 spec.
 
 ## Run (development)
 
@@ -69,3 +76,68 @@ The parser is config-driven and was validated against the real HAP v5.2
 Encoding note: output is UTF-8 with BOM (`utf-8-sig`) so Excel renders
 `m²` / `°C` correctly on double-click. Switch `csv_encoding` to `utf-8`
 for a BOM-less file.
+
+
+## AirSizer Pro (module 2)
+
+Takes the schedule HAPExt produced and automates the catalog reading an
+HVAC engineer does by hand: pick a diffuser type per subspace, enter its
+inputs, and the engine narrows the right catalog table, reads (or
+interpolates) the cell, and derives the outlet length.
+
+### Architecture
+
+- `hap_converter/airsizer/engine/` — UI-independent, same rule as module 1.
+  - `config.py` loads `config/input_matrix.json` + `config/catalogs/*.json`
+  - `lookup.py` resolves table -> row/column -> cell, with banding and
+    linear interpolation
+  - `calc.py` derived length, piece count, catalog length corrections
+  - `pipeline.py` `load_spaces(path, config)` and
+    `size_space(space, sizing_input, config) -> SizingResult`
+  - `export.py` row assembly (shared by the review table and the writer)
+    + the auto-versioned .xlsx
+  - `project.py` one JSON per sizing session + a recent-projects index
+- `hap_converter/airsizer/ui/` — home, the four-step wizard, the sizing
+  panel, review/summary.
+
+One generic engine, five catalog configs. Adding a sixth diffuser type is
+two JSON entries and no code change.
+
+### The two catalog shapes
+
+- **Group A** (Linear Slot, Linear Bar Grille, Flow Bar) — rows are
+  No. of Slots / nominal width, columns are L/s/m, each cell
+  `[Pt (Pa), "min-mid-max throw", "NC"]`. Output: **L/s/m + throw**, then
+  `Air Outlet Length (m) = Air Flow (L/s) / (L/s/m)` and the piece count.
+- **Group B** (Square Ceiling Diffuser, Grilles & Registers) — rows are
+  air flow (L/s), columns are list sizes, each cell
+  `[velocity (m/s), "min-max throw", "NC"]`. Output: the **size in mm x mm**
+  — the smallest listed size whose velocity and NC both stay within limits.
+
+Guarantees:
+
+- Tables are **banded**. Inputs outside a row's or column's published range
+  return "no valid selection", never an extrapolation.
+- A value read between two catalog entries is **interpolated linearly and
+  flagged**; the panel shows an amber banner and the export tints the row.
+- All arithmetic is `Decimal` on the exact catalog and schedule values.
+- Export writes only the columns left visible in the column picker, and
+  auto-versions (`name.xlsx`, `name_v1.xlsx`, ...).
+
+### Tuning (`config/input_matrix.json`)
+
+`diffuser_types[]` says which inputs a type takes, which catalog it reads
+and which diagram it shows. `parameters` holds the rules the brief left
+open (section 8), each with a `_TODO` note beside it:
+
+| parameter | default | what it decides |
+|---|---|---|
+| `nc_rule` | `cap_lsm_by_nc` | Noise Criteria caps the L/s/m column |
+| `throw_output` | `mid` | which terminal velocity is "the" Flow Throw |
+| `apply_length_correction` / `length_correction_basis` | `true` / `total` | whether the catalog length correction is applied, and to which length |
+| `flow_bar_slots_multiply_lsm` | `true` | parallel Flow Bar slots share the airflow |
+| `nc_less_than_policy` | `as_value` | how a cell printed `<20` compares |
+
+Catalog transcriptions live in `config/catalogs/`; each file records its
+source pages and every place the printed catalog is internally
+inconsistent, in its `notes`.

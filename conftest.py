@@ -240,3 +240,23 @@ def sample_pdf(tmp_path):
 def bad_pdf(tmp_path):
     """One unit page with a missing water flow and a truncated space row."""
     return _write_pdf(tmp_path / "bad_report.pdf", [BAD_UNIT_PAGE])
+
+
+# --------------------------------------------------------------- AirSizer Pro
+AIR_CONFIG_PATH = Path(__file__).parent / "config" / "input_matrix.json"
+
+
+@pytest.fixture(scope="session")
+def air_config():
+    """The AirSizer input matrix + all five transcribed catalogs."""
+    from hap_converter.airsizer.engine import config as air_config_mod
+
+    return air_config_mod.load(AIR_CONFIG_PATH)
+
+
+@pytest.fixture
+def space():
+    """One subspace row from a HAPExt schedule (page 1 of the real report)."""
+    from hap_converter.airsizer.engine.models import Space
+
+    return Space(name="#01D-9F-Lift Lobby", floor_area="23.9", air_flow="218", row=8)

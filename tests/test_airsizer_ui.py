@@ -225,3 +225,112 @@ def test_the_airsizer_tab_is_disabled_when_its_config_is_missing(qt_app):
     button = disabled.tab_bar._buttons["AirSizer Pro"]
     assert button.isEnabled() is False
     assert button.toolTip() == "catalogs missing"
+
+
+# ------------------------------------------------------- subspace stepper
+def test_arrows_walk_the_subspaces_without_leaving_the_panel(window):
+    dialog = SizingDialog(
+        window.air_config, window.air_spaces, window.air_spaces[1].row, {}
+    )
+    assert dialog.position_label.text() == "1 of 2"
+    assert dialog.prev_btn.isEnabled() is False    # already at the first
+    assert dialog.next_btn.isEnabled() is True
+
+    dialog._step(1)
+    assert dialog.position_label.text() == "2 of 2"
+    assert dialog._value_fields["air_flow"].text() == "218"
+    assert dialog.prev_btn.isEnabled() is True
+    assert dialog.next_btn.isEnabled() is False    # last one
+
+    dialog._step(-1)
+    assert dialog.position_label.text() == "1 of 2"
+    assert dialog._value_fields["air_flow"].text() == "868"
+
+
+def test_stepping_past_either_end_does_nothing(window):
+    dialog = SizingDialog(
+        window.air_config, window.air_spaces, window.air_spaces[1].row, {}
+    )
+    dialog._step(-1)
+    assert dialog.position_label.text() == "1 of 2"
+    dialog._step(1)
+    dialog._step(1)
+    assert dialog.position_label.text() == "2 of 2"
+
+
+def test_save_keeps_the_panel_open_so_the_arrows_stay_usable(window):
+    dialog, row = size_last_subspace(window)
+    dialog._save()
+    assert dialog.result() != SizingDialog.Accepted   # not closed
+    assert dialog.saved_hint.text() == "Saved ✓"
+    assert window.air_results[row].ok is True
+
+    dialog._step(-1)                                 # still navigable
+    assert dialog.position_label.text() == "1 of 2"
+
+
+def test_a_saved_subspace_is_ticked_in_the_picker(window):
+    dialog, _row = size_last_subspace(window)
+    dialog._save()
+    names = [dialog.space_combo.itemText(i) for i in range(dialog.space_combo.count())]
+    assert names == ["#01A-9FCorridor1", "✓  #01D-9F-Lift Lobby"]
+
+
+def test_stepping_back_restores_the_saved_sizing(window):
+    dialog, _row = size_last_subspace(window)
+    dialog._save()
+    dialog._step(-1)
+    assert dialog._outputs["lsm"].text() == PENDING   # the other space is untouched
+    dialog._step(1)
+    assert dialog._outputs["lsm"].text() == "100"     # comes back sized
+    assert dialog.type_combo.currentText() == "Linear Bar Grille"
+
+
+def test_leaving_an_unsaved_sizing_asks_first(window, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    dialog, _row = size_last_subspace(window)         # sized, deliberately not saved
+    assert dialog._is_dirty() is True
+
+    asked = []
+    monkeypatch.setattr(
+        QMessageBox, "question",
+        lambda *args, **kwargs: (asked.append(1), QMessageBox.Cancel)[1],
+    )
+    dialog._step(-1)
+    assert asked, "stepping away from unsaved work must prompt"
+    assert dialog.position_label.text() == "2 of 2"   # Cancel stayed put
+
+
+def test_choosing_save_in_the_prompt_commits_then_moves(window, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    dialog, row = size_last_subspace(window)
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Save)
+    dialog._step(-1)
+    assert window.air_results[row].ok is True
+    assert dialog.position_label.text() == "1 of 2"
+
+
+def test_discarding_moves_on_without_recording(window, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    dialog, row = size_last_subspace(window)
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Discard)
+    dialog._step(-1)
+    assert row not in window.air_results
+    assert dialog.position_label.text() == "1 of 2"
+
+
+def test_a_clean_panel_steps_without_asking(window, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("must not prompt when nothing is unsaved")
+
+    monkeypatch.setattr(QMessageBox, "question", refuse)
+    dialog = SizingDialog(
+        window.air_config, window.air_spaces, window.air_spaces[1].row, {}
+    )
+    dialog._step(1)
+    assert dialog.position_label.text() == "2 of 2"

@@ -10,7 +10,7 @@ interpolated between two catalogue entries.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QIntValidator, QPixmap
 from PySide6.QtWidgets import (
     QComboBox,
@@ -19,7 +19,9 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -66,10 +68,16 @@ class SizingDialog(QDialog):
         self.setMinimumSize(1040, 620)
 
         self._config = config
-        self._saved = saved_inputs or {}
+        self._saved = saved_inputs if saved_inputs is not None else {}
         self._spaces = [s for s in spaces if pipeline.sizable(s)]
+        self._names = {s.row: s.name for s in self._spaces}
         self._result: SizingResult | None = None
         self._loading = False
+        self._current_row = self._spaces[0].row if self._spaces else 0
+
+        self._hint_timer = QTimer(self)
+        self._hint_timer.setSingleShot(True)
+        self._hint_timer.timeout.connect(lambda: self.saved_hint.setText(""))
 
         root = QHBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
@@ -88,7 +96,7 @@ class SizingDialog(QDialog):
         lay.setSpacing(12)
 
         picker = QHBoxLayout()
-        picker.setSpacing(10)
+        picker.setSpacing(8)
         title = QLabel("Zone Name / Space Name")
         title.setObjectName("SizingLabel")
         picker.addWidget(title)
@@ -98,6 +106,10 @@ class SizingDialog(QDialog):
             self.space_combo.addItem(space.name, space.row)
         self.space_combo.currentIndexChanged.connect(self._on_space_changed)
         picker.addWidget(self.space_combo, 1)
+        picker.addWidget(self._build_stepper())
+        self.position_label = QLabel("")
+        self.position_label.setObjectName("SpacePosition")
+        picker.addWidget(self.position_label)
         bolt = QLabel("⚡")
         bolt.setToolTip("Values below come from the HAPExt schedule")
         picker.addWidget(bolt)
@@ -134,6 +146,33 @@ class SizingDialog(QDialog):
             lay.addLayout(self._form_row(spec.title(), control))
         lay.addStretch(1)
         return panel
+
+    def _build_stepper(self) -> QWidget:
+        """The up/down pair that walks the subspaces without leaving the panel."""
+        box = QFrame()
+        box.setObjectName("SpinnerBox")
+        lay = QVBoxLayout(box)
+        lay.setContentsMargins(1, 1, 1, 1)
+        lay.setSpacing(0)
+
+        self.prev_btn = QToolButton()
+        self.prev_btn.setObjectName("SpinBtn")
+        self.prev_btn.setText("▲")
+        self.prev_btn.setCursor(Qt.PointingHandCursor)
+        self.prev_btn.setToolTip("Previous subspace (Alt+Up)")
+        self.prev_btn.setShortcut("Alt+Up")
+        self.prev_btn.clicked.connect(lambda: self._step(-1))
+        lay.addWidget(self.prev_btn)
+
+        self.next_btn = QToolButton()
+        self.next_btn.setObjectName("SpinBtn")
+        self.next_btn.setText("▼")
+        self.next_btn.setCursor(Qt.PointingHandCursor)
+        self.next_btn.setToolTip("Next subspace (Alt+Down)")
+        self.next_btn.setShortcut("Alt+Down")
+        self.next_btn.clicked.connect(lambda: self._step(1))
+        lay.addWidget(self.next_btn)
+        return box
 
     @staticmethod
     def _form_row(caption: str, control: QWidget) -> QHBoxLayout:
@@ -216,6 +255,11 @@ class SizingDialog(QDialog):
         lay.addWidget(self.derived_label)
         lay.addStretch(1)
 
+        self.saved_hint = QLabel("")
+        self.saved_hint.setObjectName("SavedHint")
+        self.saved_hint.setAlignment(Qt.AlignRight)
+        lay.addWidget(self.saved_hint)
+
         buttons = QHBoxLayout()
         buttons.setSpacing(12)
         self.save_btn = QPushButton("SAVE")
@@ -242,17 +286,80 @@ class SizingDialog(QDialog):
 
     def _select_row(self, row: int) -> None:
         index = self.space_combo.findData(row)
+        self._loading = True
         self.space_combo.setCurrentIndex(max(0, index))
+        self._loading = False
         self._load_space()
 
-    def _on_space_changed(self, _index: int) -> None:
-        if not self._loading:
-            self._load_space()
+    def _step(self, delta: int) -> None:
+        """Walk to the neighbouring subspace, keeping the panel open."""
+        index = self.space_combo.currentIndex() + delta
+        if 0 <= index < self.space_combo.count():
+            self.space_combo.setCurrentIndex(index)
+
+    def _on_space_changed(self, index: int) -> None:
+        if self._loading:
+            return
+        target = self.space_combo.itemData(index)
+        if target is None or int(target) == self._current_row:
+            return
+        if not self._confirm_leave():
+            self._loading = True          # bounce back without reloading
+            self.space_combo.setCurrentIndex(self.space_combo.findData(self._current_row))
+            self._loading = False
+            return
+        self._load_space()
+
+    def _is_dirty(self) -> bool:
+        """A valid result is on screen that differs from what is stored."""
+        if not (self._result and self._result.ok):
+            return False
+        stored = self._saved.get(self._current_row)
+        current = self.sizing_input()
+        return (
+            stored is None
+            or stored.diffuser != current.diffuser
+            or stored.values != current.values
+        )
+
+    def _confirm_leave(self) -> bool:
+        """Ask before dropping a sized-but-unsaved subspace. True = go ahead."""
+        if not self._is_dirty():
+            return True
+        answer = QMessageBox.question(
+            self,
+            "Save this sizing?",
+            f"{self._names.get(self._current_row, 'This subspace')} has been sized "
+            "but not saved.",
+            QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
+            QMessageBox.Save,
+        )
+        if answer == QMessageBox.Cancel:
+            return False
+        if answer == QMessageBox.Save:
+            self._commit()
+        return True
+
+    def _refresh_nav(self) -> None:
+        """Arrow availability, the position readout, and a tick per saved space."""
+        index = self.space_combo.currentIndex()
+        count = self.space_combo.count()
+        self.prev_btn.setEnabled(index > 0)
+        self.next_btn.setEnabled(index < count - 1)
+        self.position_label.setText(f"{index + 1} of {count}")
+
+        was_loading, self._loading = self._loading, True
+        for position in range(count):
+            row = int(self.space_combo.itemData(position))
+            name = self._names[row]
+            self.space_combo.setItemText(position, f"✓  {name}" if row in self._saved else name)
+        self._loading = was_loading
 
     def _load_space(self) -> None:
         """Show the schedule values and any sizing already saved for this row."""
         self._loading = True
         space = self._space()
+        self._current_row = space.row
         self._value_fields["floor_area"].setText(space.floor_area or "—")
         self._value_fields["total_coil"].setText(space.total_coil or "—")
         self._value_fields["sens_coil"].setText(space.sens_coil or "—")
@@ -267,6 +374,7 @@ class SizingDialog(QDialog):
         if saved:
             self._run_sizing()
         self._refresh_buttons()
+        self._refresh_nav()
 
     def _on_type_changed(self, _index: int) -> None:
         if self._loading:
@@ -394,7 +502,23 @@ class SizingDialog(QDialog):
             self.interp_banner.hide()
         self._refresh_buttons()
 
+    def _commit(self) -> None:
+        """Hand the sizing to the app and remember it locally."""
+        if not (self._result and self._result.ok):
+            return
+        sizing_input = self.sizing_input()
+        self.saved.emit(self._current_row, sizing_input, self._result)
+        self._saved[self._current_row] = sizing_input
+
     def _save(self) -> None:
-        if self._result and self._result.ok:
-            self.saved.emit(self.row, self.sizing_input(), self._result)
-            self.accept()
+        """SAVE keeps the panel open so the arrows can walk to the next subspace."""
+        if not (self._result and self._result.ok):
+            return
+        self._commit()
+        self._refresh_nav()
+        self.saved_hint.setText("Saved ✓")
+        self._hint_timer.start(2500)
+
+    def reject(self) -> None:
+        if self._confirm_leave():
+            super().reject()

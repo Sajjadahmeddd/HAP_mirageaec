@@ -556,6 +556,30 @@ QComboBox QAbstractItemView {{
 }}
 QLineEdit:disabled {{ background: #ECECEA; color: #A0A3AC; }}
 
+/* ---------- subspace stepper (attached to the Zone Name field) ---------- */
+#SpinnerBox {{
+    background: white;
+    border: 1px solid #C9C9C2;
+    border-radius: 8px;
+}}
+QToolButton#SpinBtn {{
+    background: transparent;
+    border: none;
+    color: {TEXT};
+    font-size: 8px;
+    padding: 0px;
+    min-width: 24px; max-width: 24px;
+    min-height: 15px; max-height: 15px;
+}}
+QToolButton#SpinBtn:hover {{ color: {GREEN_DARK}; }}
+QToolButton#SpinBtn:disabled {{ color: #C7C9CF; }}
+#SpacePosition {{
+    color: {TEXT_MUTED};
+    font-size: 11px;
+    font-weight: 700;
+}}
+#SavedHint {{ color: {GREEN_DARK}; font-size: 11px; font-weight: 700; }}
+
 /* ---------- banners ---------- */
 #InterpBanner {{
     background: #FBEFD3;

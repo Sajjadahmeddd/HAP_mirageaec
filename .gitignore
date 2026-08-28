@@ -11,3 +11,7 @@ dist/
 
 # Generated output
 output/
+
+# Web app
+frontend/node_modules/
+frontend/dist/

@@ -1,0 +1,289 @@
+/* Design tokens ported straight from hap_converter/ui/theme.py so the web
+   app and the desktop app read as the same product. */
+
+:root {
+  --navy: #141B4D;
+  --navy-soft: #3D4B9E;
+  --blue: #1E5EDB;
+  --green: #6E8B23;
+  --green-dark: #5A731C;
+  --green-soft: #EDF2DC;
+  --red: #D64545;
+  --red-soft: #FDEDED;
+  --amber-soft: #FBEFD3;
+  --amber-line: #E3C989;
+  --amber-ink: #7A5B12;
+  --canvas: #F4F4F1;
+  --card: #FFFFFF;
+  --border: #E4E4DE;
+  --text: #1E2230;
+  --muted: #8A8D98;
+  --titlebar: #E9E9E6;
+  --panel: #D9D9D6;
+  --panel-side: #C9C9C6;
+  --field: #ECECEA;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  background: var(--canvas);
+  color: var(--text);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+}
+
+button { font-family: inherit; }
+
+/* ---------- shell ---------- */
+.shell { display: flex; flex-direction: column; height: 100%; }
+
+.titlebar {
+  background: var(--titlebar);
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  flex: none;
+}
+.titlebar img { height: 26px; }
+.brand { font-size: 16px; font-weight: 800; }
+.brand .accent { color: var(--blue); }
+.version { color: var(--muted); font-size: 11px; font-weight: 700; }
+
+.tabbar {
+  background: var(--titlebar);
+  display: flex;
+  gap: 4px;
+  padding: 0 10px;
+  flex: none;
+}
+.tab {
+  background: #DCDCD8;
+  color: #6B6E78;
+  border: none;
+  border-radius: 8px 8px 0 0;
+  padding: 9px 26px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tab.active { background: var(--navy); color: #fff; }
+.tab:disabled { color: #9B9EA8; cursor: not-allowed; }
+
+/* The page fills whatever the title bar and tabs leave, and its root child
+   stretches to fill that in turn — otherwise a screen only grows as tall as
+   its content and the bottom quarter of the window sits empty. This is the
+   web equivalent of the stretch factors the PySide6 layouts use. */
+.page {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 28px;
+  display: flex;
+  flex-direction: column;
+}
+.page > * { flex: 1 1 auto; min-height: 0; }
+
+/* ---------- cards + text ---------- */
+.card, .panel-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+.info-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
+.info-card h4 { margin: 0 0 4px; font-size: 13px; font-weight: 700; }
+.info-card p { margin: 0; font-size: 11px; color: var(--muted); }
+
+h1.h1 { font-size: 26px; font-weight: 800; margin: 0; }
+h2.h2, .h2 { font-size: 15px; font-weight: 700; margin: 0; }
+.muted { color: var(--muted); font-size: 12px; }
+.small { color: var(--muted); font-size: 11px; }
+.status-ok { color: var(--green-dark); font-size: 12px; font-weight: 700; }
+.status-fail { color: var(--red); font-size: 12px; font-weight: 700; }
+
+/* ---------- buttons ---------- */
+.btn { border-radius: 19px; padding: 10px 28px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
+.btn:disabled { cursor: not-allowed; }
+.btn-primary { background: var(--green); color: #fff; border: none; padding: 10px 34px; font-weight: 700; }
+.btn-primary:hover:not(:disabled) { background: var(--green-dark); }
+.btn-primary:disabled { background: #C9CFB6; color: #F4F4F1; }
+.btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover:not(:disabled) { border-color: var(--green); color: var(--green-dark); }
+.btn-secondary:disabled { color: var(--muted); }
+.btn-close { background: #7A4A44; color: #fff; border: none; padding: 10px 34px; font-weight: 700; }
+.btn-close:hover { background: #663C37; }
+.btn-ghost { background: transparent; border: none; color: var(--green-dark); font-size: 12px; font-weight: 600; text-decoration: underline; cursor: pointer; padding: 4px; }
+.btn-row { background: var(--green); color: #fff; border: none; border-radius: 10px; padding: 4px 18px; font-size: 10px; font-weight: 700; cursor: pointer; }
+.btn-row:hover { background: var(--green-dark); }
+.btn-row.done { background: var(--green-dark); }
+
+/* ---------- drop zone ---------- */
+.dropzone {
+  background: var(--card);
+  border: 2px dashed #C9C9C2;
+  border-radius: 16px;
+  min-height: 240px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; padding: 24px; text-align: center;
+  max-height: 400px;
+}
+.dropzone.active { border-color: var(--green); background: var(--green-soft); }
+.dropzone.error { border-color: var(--red); background: var(--red-soft); }
+.dropzone.small { min-height: 96px; max-height: 190px; padding: 16px; }
+
+.pdf-badge {
+  background: var(--red-soft); color: var(--red); border: 1px solid #F5C6C6;
+  border-radius: 8px; font-size: 9px; font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+/* ---------- pills, chips ---------- */
+.pill-ok { background: var(--green-soft); color: var(--green-dark); border-radius: 10px; padding: 4px 14px; font-size: 10px; font-weight: 800; }
+.pill-fail { background: var(--red-soft); color: var(--red); border-radius: 10px; padding: 4px 14px; font-size: 10px; font-weight: 800; }
+.chip { background: var(--green-soft); color: var(--green-dark); border-radius: 8px; padding: 5px 12px; font-size: 10px; font-weight: 700; }
+.sheet-tab { background: var(--navy); color: #fff; border-radius: 8px 8px 0 0; padding: 8px 18px; font-size: 11px; font-weight: 700; display: inline-block; }
+
+/* ---------- progress ---------- */
+.progress { background: #E7E7E2; border-radius: 5px; height: 10px; overflow: hidden; }
+.progress > div { background: var(--green); height: 100%; border-radius: 5px; transition: width .2s; }
+
+/* ---------- tables ---------- */
+/* A long table scrolls inside its own card rather than pushing the page
+   taller, so the footer actions stay put. The floor keeps it usable when
+   the window is short; below that the page itself scrolls. */
+.table-wrap { border: 1px solid var(--border); border-radius: 8px; overflow: auto; background: var(--card); min-height: 180px; }
+table.grid { border-collapse: collapse; width: 100%; font-size: 11px; }
+table.grid th {
+  background: #F7F7F4; color: var(--text); text-align: left;
+  border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  padding: 6px 8px; font-size: 10px; font-weight: 700; position: sticky; top: 0; z-index: 1;
+  white-space: nowrap;
+}
+table.grid td { border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 4px 8px; white-space: nowrap; }
+table.grid td.blank { color: #999; }
+table.grid tr.unit td { font-weight: 700; }
+table.grid td.indent { padding-left: 28px; }
+table.grid tr.sized td { background: var(--green-soft); }
+table.grid tr.interpolated td { background: var(--amber-soft); }
+table.grid tr.failed td { background: var(--red-soft); }
+table.grid tr.new-row td { background: #E9F3DA; }
+
+/* ---------- summary strip ---------- */
+.summary { background: #F7F7F4; border: 1px solid var(--border); border-radius: 10px; padding: 10px 18px; display: flex; gap: 30px; flex-wrap: wrap; }
+.summary .key { color: var(--muted); font-size: 10px; font-weight: 700; }
+.summary .val { font-size: 12px; font-weight: 700; }
+
+/* ---------- step timeline (HAPExt) ---------- */
+.timeline { display: flex; flex-direction: column; gap: 4px; }
+.timeline .step { display: flex; gap: 12px; align-items: flex-start; }
+.dot { width: 22px; height: 22px; border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; flex: none; }
+.dot.pending { background: #E0E0DB; color: #8A8D98; }
+.dot.done { background: var(--green); color: #fff; }
+.dot.fail { background: var(--red); color: #fff; }
+.connector { width: 2px; height: 18px; background: var(--border); margin-left: 10px; }
+.step-caption { color: var(--red); font-size: 11px; font-weight: 700; }
+
+/* ---------- wizard chips (AirSizer) ---------- */
+.chips { display: flex; align-items: center; gap: 0; }
+.chips .wchip {
+  background: #E7E9E4; color: #6B6E78; border-radius: 15px;
+  padding: 9px 22px; font-size: 11px; font-weight: 700; white-space: nowrap;
+}
+.chips .wchip.active, .chips .wchip.done { background: var(--navy); color: #fff; }
+.chips .line { flex: 1; height: 1px; background: var(--border); }
+
+/* ---------- feature band ---------- */
+.feature-band { background: var(--navy); border-radius: 18px; display: flex; padding: 12px 18px; gap: 8px; }
+.feature-band div { flex: 1; color: #fff; font-size: 12px; font-weight: 700; text-align: center; white-space: pre-line; }
+
+/* ---------- forms ---------- */
+label.field { font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; }
+input[type=text], input[type=date], select {
+  background: #fff; color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 7px 10px; font-size: 12px; width: 100%; font-family: inherit;
+}
+input:focus, select:focus { border-color: var(--green); outline: none; }
+select:disabled, input:disabled { background: var(--field); color: #A0A3AC; cursor: not-allowed; }
+
+/* ---------- modal ---------- */
+.overlay { position: fixed; inset: 0; background: rgba(20,27,77,.35); display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 50; }
+.modal { background: var(--card); border-radius: 16px; max-height: 92vh; overflow: auto; padding: 22px; }
+
+/* ---------- sizing panel ---------- */
+.sizing-grid { display: grid; grid-template-columns: 11fr 9fr; gap: 16px; }
+.sizing-form { background: var(--panel); border: 1px solid #C9C9C2; border-radius: 14px; padding: 16px 20px; }
+.sizing-side { background: var(--panel-side); border-radius: 14px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+.readonly-field { background: var(--field); border: 1px solid #C9C9C2; border-radius: 8px; padding: 8px 12px; font-size: 12px; text-align: center; }
+.field-caption { font-size: 11px; font-weight: 700; text-align: center; margin-bottom: 4px; }
+.form-row { display: grid; grid-template-columns: 190px 1fr; align-items: center; gap: 14px; margin-bottom: 10px; }
+.form-row > span { font-size: 12px; font-weight: 700; }
+.diagram-frame { background: #fff; border: 1px solid #C9C9C2; border-radius: 10px; padding: 10px; display: flex; align-items: center; justify-content: center; min-height: 170px; }
+.diagram-frame img { max-width: 100%; max-height: 190px; }
+.btn-sizing { background: var(--green); color: #fff; border: none; border-radius: 22px; padding: 12px 46px; font-size: 17px; font-weight: 800; cursor: pointer; align-self: center; }
+.btn-sizing:hover:not(:disabled) { background: var(--green-dark); }
+.btn-sizing:disabled { background: #B8BEA8; color: #EFEFEA; cursor: not-allowed; }
+.output-row { display: grid; grid-template-columns: 140px 1fr; align-items: center; gap: 12px; }
+.output-row > span { font-size: 12px; font-weight: 700; }
+.output-field { background: var(--field); border: 1px solid #C9C9C2; border-radius: 8px; padding: 9px 14px; font-size: 12px; font-weight: 700; text-align: center; }
+.output-field.pending, .output-field.na { color: #A0A3AC; font-weight: 600; }
+.output-field.interpolated { background: var(--amber-soft); border-color: var(--amber-line); color: var(--amber-ink); }
+
+/* the up/down stepper beside the Zone Name field */
+.spinner { display: flex; flex-direction: column; border: 1px solid #C9C9C2; border-radius: 8px; background: #fff; overflow: hidden; }
+.spinner button { border: none; background: transparent; cursor: pointer; font-size: 8px; width: 24px; height: 15px; padding: 0; color: var(--text); }
+.spinner button:hover:not(:disabled) { color: var(--green-dark); }
+.spinner button:disabled { color: #C7C9CF; cursor: not-allowed; }
+.position { color: var(--muted); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.saved-hint { color: var(--green-dark); font-size: 11px; font-weight: 700; text-align: right; min-height: 15px; }
+
+/* ---------- banners ---------- */
+.banner-interp { background: var(--amber-soft); border: 1px solid var(--amber-line); border-radius: 10px; padding: 8px 12px; color: var(--amber-ink); font-size: 11px; font-weight: 700; }
+.banner-fail { background: var(--red-soft); border: 1px solid #F5C6C6; border-radius: 10px; padding: 8px 12px; color: var(--red); font-size: 11px; font-weight: 700; }
+
+/* ---------- failure page ---------- */
+.reason-frame { border: 1px solid var(--border); border-radius: 12px; padding: 6px 16px; }
+.reason { display: flex; gap: 14px; padding: 10px 0; align-items: flex-start; }
+.reason + .reason { border-top: 1px solid var(--border); }
+.reason-icon { background: var(--red-soft); color: var(--red); border-radius: 8px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: 800; flex: none; }
+.reason-title { font-size: 13px; font-weight: 700; width: 180px; flex: none; }
+.reason-desc { font-size: 12px; color: var(--text); white-space: pre-line; }
+.issue-list { max-height: 260px; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+
+/* ---------- column picker ---------- */
+.picker { position: relative; }
+.picker > button { background: transparent; border: none; color: #9B9EA8; font-size: 15px; font-weight: 800; cursor: pointer; padding: 2px 6px; }
+.picker > button:hover { color: var(--navy); }
+.picker-menu {
+  position: absolute; right: 0; top: 26px; z-index: 20;
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px; min-width: 220px; box-shadow: 0 8px 24px rgba(20,27,77,.14);
+  max-height: 320px; overflow: auto;
+}
+.picker-menu label { display: flex; gap: 8px; align-items: center; padding: 6px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+.picker-menu label:hover { background: var(--green-soft); color: var(--green-dark); }
+.picker-menu label.locked { color: var(--muted); cursor: default; }
+
+/* ---------- quick start / help ---------- */
+.quick-icon { background: var(--green-soft); border: 1px solid #D5DFBE; border-radius: 12px; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+.help-card { background: #F4F7EC; border: 1px solid #DCE5C6; border-radius: 12px; padding: 12px 16px; display: flex; align-items: center; gap: 10px; }
+.recent-item { display: flex; gap: 10px; align-items: center; padding: 8px; border-radius: 10px; cursor: pointer; }
+.recent-item:hover { background: var(--canvas); }
+.recent-name { font-size: 12px; font-weight: 700; }
+
+/* ---------- layout helpers ---------- */
+.row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.col { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.grow { flex: 1; min-width: 0; }
+/* stretch, not start: both columns run the full height of the page */
+.split { display: grid; grid-template-columns: 13fr 7fr; gap: 24px; align-items: stretch; }
+.radios { display: flex; gap: 30px; align-items: center; }
+.radios label { display: flex; gap: 6px; align-items: center; font-size: 13px; font-weight: 600; cursor: pointer; }
+
+@media (max-width: 1100px) {
+  .split, .sizing-grid { grid-template-columns: 1fr; }
+  .form-row { grid-template-columns: 150px 1fr; }
+}

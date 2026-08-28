@@ -1,0 +1,24 @@
+# Render blueprint — one web service that serves both the API and the React
+# bundle, so there is a single URL and no CORS in production.
+#
+# The build compiles the frontend, then installs the Python side. Render's
+# native Python runtime ships with Node; if your chosen runtime does not have
+# it, see "Deploying without Node" in backend/README.md.
+
+services:
+  - type: web
+    name: maec
+    runtime: python
+    plan: starter          # 512 MB is enough; a 350-page parse peaks well under it
+    region: frankfurt      # move this to the region nearest your office
+    buildCommand: |
+      npm --prefix frontend ci
+      npm --prefix frontend run build
+      pip install -r backend/requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT --timeout-keep-alive 120
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: PYTHONUNBUFFERED
+        value: "1"

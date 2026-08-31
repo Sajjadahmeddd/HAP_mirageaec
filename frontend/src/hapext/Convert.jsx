@@ -30,6 +30,7 @@ export default function Convert({ ctx }) {
         clearInterval(timer)
         setPercent(100)
         ctx.setConversion(data)
+        if (data.ok) ctx.rememberConversion(data)   // browser-local history
         ctx.setPage(data.ok ? 'hap-result' : 'hap-failure')
       })
       .catch((err) => {

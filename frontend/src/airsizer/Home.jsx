@@ -5,6 +5,8 @@ import { useRef, useState } from 'react'
 import { airsizer } from '../api'
 import { Modal } from '../components.jsx'
 import { DuctArt } from '../HeroArt.jsx'
+import RecentPanel from '../RecentPanel.jsx'
+import { AIRSIZER } from '../recents'
 
 const FEATURES = ['Accurate\nSizing', 'Smart\nSelection', 'Clear\nValidation', 'Reliable\nResults']
 
@@ -81,11 +83,12 @@ export default function Home({ ctx }) {
         {error && <div className="banner-fail">{error}</div>}
 
         <h2 className="h2">Recent Projects</h2>
-        <div className="panel-card" style={{ padding: '14px', flex: 1 }}>
-          <div className="muted" style={{ textAlign: 'center', padding: '24px 0' }}>
-            Sizing sessions are held in this browser tab only
-          </div>
-        </div>
+        <RecentPanel
+          module={AIRSIZER}
+          refreshKey={ctx.recentsKey}
+          onOpen={ctx.openSizing}
+          emptyText="No sizing sessions yet — size some diffusers and export"
+        />
 
         <div className="help-card">
           <h4 className="grow" style={{ margin: 0, fontSize: 13 }}>AirSizer Pro — how sizing works</h4>

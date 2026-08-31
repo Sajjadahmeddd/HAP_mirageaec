@@ -115,6 +115,7 @@ export default function Review({ ctx }) {
         base_name: ctx.airBaseName,
         project_name: ctx.airSource,
       })
+      ctx.rememberSizing()          // keep it in this browser's history
       setStage(4)
     } catch (err) {
       setError(err.message)

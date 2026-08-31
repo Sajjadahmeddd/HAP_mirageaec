@@ -1,4 +1,6 @@
 import { BuildingArt } from '../HeroArt.jsx'
+import RecentPanel from '../RecentPanel.jsx'
+import { HAPEXT } from '../recents'
 
 // HAPExt home — hero + feature band on the left, Quick Start on the right.
 // Ported from hap_converter/ui/pages/home_page.py.
@@ -55,14 +57,13 @@ export default function Home({ ctx }) {
           />
         </div>
 
-        <div className="panel-card" style={{ padding: '16px 18px', flex: 1 }}>
-          <div className="row" style={{ marginBottom: 6 }}>
-            <h2 className="h2 grow">Recent Projects</h2>
-          </div>
-          <div className="muted" style={{ textAlign: 'center', padding: '24px 0' }}>
-            Conversion history is not kept on the server
-          </div>
-        </div>
+        <h2 className="h2">Recent Projects</h2>
+        <RecentPanel
+          module={HAPEXT}
+          refreshKey={ctx.recentsKey}
+          onOpen={ctx.openConversion}
+          emptyText="No conversions yet — convert a PDF and it will appear here"
+        />
       </div>
     </div>
   )

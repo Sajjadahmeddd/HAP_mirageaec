@@ -22,3 +22,16 @@ services:
         value: "3.12"
       - key: PYTHONUNBUFFERED
         value: "1"
+
+      # The team password. A Render URL is public, so leaving this unset
+      # means anyone with the link can use the app — the service logs a
+      # loud warning at startup if that happens. Set it in the Render
+      # dashboard; sync:false keeps it out of this file and out of git.
+      - key: MAEC_PASSWORD
+        sync: false
+
+      # Signs the session cookie. generateValue makes Render mint a random
+      # one on first deploy. Changing it signs everybody out — which is
+      # also your "log everyone out now" switch.
+      - key: MAEC_SECRET_KEY
+        generateValue: true

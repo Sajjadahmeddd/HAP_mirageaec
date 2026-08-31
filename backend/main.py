@@ -11,18 +11,49 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
 from hap_converter import __version__
 
+from . import auth
 from .deps import airsizer_config, hapext_config
 from .routers import airsizer, hapext
 
 FRONTEND_DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 
 app = FastAPI(title="MAEC", version=__version__)
+
+# ORDER MATTERS. Starlette runs the *last* middleware added as the outermost
+# one, so the guard is registered first and SessionMiddleware second — that
+# way the session cookie is decoded before the guard tries to read it.
+# Registered the other way round, request.session does not exist yet and
+# every request looks signed out.
+@app.middleware("http")
+async def guard(request: Request, call_next):
+    """Refuse API calls from anyone who has not signed in.
+
+    The SPA itself is always served — it has to load in order to show a login
+    screen — so only /api/* is gated, minus the login exchange and health.
+    """
+    if auth.requires_auth(request.url.path) and not auth.is_signed_in(request):
+        return JSONResponse({"detail": "Sign in required."}, status_code=401)
+    return await call_next(request)
+
+
+# Signed-cookie sessions: no server-side store, so a Render restart or a
+# second instance changes nothing. https_only is off in local development
+# because there is no TLS on 127.0.0.1.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=auth.secret_key(),
+    session_cookie="maec_session",
+    max_age=auth.SESSION_MAX_AGE,
+    same_site="lax",
+    https_only=bool(os.environ.get("RENDER")),
+)
 
 if os.environ.get("MAEC_DEV"):
     from fastapi.middleware.cors import CORSMiddleware
@@ -34,6 +65,7 @@ if os.environ.get("MAEC_DEV"):
         allow_headers=["*"],
     )
 
+app.include_router(auth.router)
 app.include_router(hapext.router)
 app.include_router(airsizer.router)
 
@@ -48,7 +80,25 @@ async def health():
         "version": __version__,
         "modules": ["HAPExt", "AirSizer Pro"],
         "diffusers": len(air.diffusers),
+        "auth": "on" if auth.is_enabled() else "off",
     }
+
+
+@app.on_event("startup")
+async def announce_auth() -> None:
+    """Say plainly whether the service is open, so an unset password on a
+    public Render URL cannot pass unnoticed."""
+    if auth.is_enabled():
+        if not os.environ.get("MAEC_SECRET_KEY"):
+            print("MAEC: auth ON, but MAEC_SECRET_KEY is unset — "
+                  "everyone is signed out on restart. Set it in Render.")
+        else:
+            print("MAEC: auth ON (shared password).")
+    elif os.environ.get("RENDER"):
+        print("MAEC: *** WARNING *** deployed with MAEC_PASSWORD unset — "
+              "anyone with the URL can use this app.")
+    else:
+        print("MAEC: auth OFF (MAEC_PASSWORD unset) — fine for local use.")
 
 
 # ---------------------------------------------------------------- frontend

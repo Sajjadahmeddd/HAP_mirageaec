@@ -1,7 +1,19 @@
 // Thin fetch wrappers. Every call maps to one endpoint that wraps one engine
 // function — no logic lives here.
 
+// A 401 means the session lapsed mid-use. Tell the shell so it can drop back
+// to the login screen rather than surfacing a confusing error on the page.
+export const SESSION_EXPIRED = 'maec:session-expired'
+
+function checkAuth(response) {
+  if (response.status === 401) {
+    window.dispatchEvent(new CustomEvent(SESSION_EXPIRED))
+    throw new Error('Your session has expired. Please sign in again.')
+  }
+}
+
 async function asJson(response) {
+  checkAuth(response)
   if (!response.ok) {
     let detail = `Request failed (${response.status})`
     try {
@@ -16,6 +28,7 @@ async function asJson(response) {
 // A file download: the server streams the built file back, and the browser
 // saves it under the filename in Content-Disposition.
 async function download(response, fallbackName) {
+  checkAuth(response)
   if (!response.ok) {
     let detail = `Download failed (${response.status})`
     try {
@@ -47,6 +60,29 @@ export function base64ToBlob(b64, type) {
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
   return new Blob([bytes], { type })
+}
+
+// -------------------------------------------------------------------- auth
+export const auth = {
+  me() {
+    return fetch('/api/auth/me').then(asJson)
+  },
+  login(email, password) {
+    return fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    }).then(async (response) => {
+      if (response.status === 401) {
+        const body = await response.json().catch(() => ({}))
+        throw new Error(body.detail || 'Incorrect email address or password.')
+      }
+      return asJson(response)
+    })
+  },
+  logout() {
+    return fetch('/api/auth/logout', { method: 'POST' }).then(asJson)
+  },
 }
 
 // ------------------------------------------------------------------ HAPExt

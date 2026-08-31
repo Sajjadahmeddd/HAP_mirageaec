@@ -61,6 +61,46 @@ npm --prefix frontend run build
 
 Interactive docs at `/docs`.
 
+## Sign-in
+
+A Render service has a **public URL**, so without a gate anyone holding the
+link could upload reports and pull schedules. `backend/auth.py` closes that
+with a shared team password.
+
+| Variable | Purpose |
+|---|---|
+| `MAEC_PASSWORD` | The team password. **Unset means the app is wide open** — fine locally, dangerous on Render. |
+| `MAEC_SECRET_KEY` | Signs the session cookie. Changing it signs everyone out. |
+
+The service says which mode it is in at startup, and `/api/health` reports
+`"auth": "on" \| "off"`, so an unset password on a public URL cannot pass
+unnoticed.
+
+Everything under `/api/` is guarded except `/api/auth/*` and `/api/health`.
+The SPA shell itself is always served — it has to load in order to show a
+login screen at all.
+
+The session is a **signed cookie**, not a server-side session store, so it
+survives a restart or a second instance with no shared state. Cookies are
+`httponly` + `samesite=lax`, and `secure` whenever `RENDER` is set.
+
+⚠️ **Middleware order matters.** The guard is registered *before*
+`SessionMiddleware` so that Starlette runs the session decoder first.
+Registered the other way round, `request.session` does not exist when the
+guard reads it and every request looks signed out.
+
+Run it locally with auth on:
+
+```powershell
+$env:MAEC_PASSWORD = "something"
+.\.venv\Scripts\python -m uvicorn backend.main:app --port 8000
+```
+
+**Upgrading to per-user logins** is deliberately small: `auth.verify()` grows
+a username lookup against bcrypt hashes held in a `MAEC_USERS` env var, and
+`Login.jsx` gains a username field. The guard, the cookie, the routes and the
+rest of the frontend are untouched. Still no database.
+
 ## Statelessness
 
 Render's disk is ephemeral, so nothing is kept between requests:

@@ -202,7 +202,7 @@ table.grid tr.new-row td { background: #E9F3DA; }
 
 /* ---------- forms ---------- */
 label.field { font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; }
-input[type=text], input[type=date], select {
+input[type=text], input[type=email], input[type=password], input[type=date], select {
   background: #fff; color: var(--text); border: 1px solid var(--border);
   border-radius: 8px; padding: 7px 10px; font-size: 12px; width: 100%; font-family: inherit;
 }
@@ -286,4 +286,77 @@ select:disabled, input:disabled { background: var(--field); color: #A0A3AC; curs
 @media (max-width: 1100px) {
   .split, .sizing-grid { grid-template-columns: 1fr; }
   .form-row { grid-template-columns: 150px 1fr; }
+}
+
+/* ---------- sign-in ----------------------------------------------------
+   Follows the reference layout the client supplied (logo, product name, a
+   card with email + password) but in MAEC's palette: navy heading, green
+   primary action, the app's own canvas behind it. */
+.login-page {
+  min-height: 100%;
+  background: var(--canvas);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 56px 24px;
+  overflow: auto;
+}
+.login-inner { width: 100%; max-width: 430px; text-align: center; }
+
+.login-logo {
+  width: 118px; height: 118px;
+  object-fit: contain;
+  margin-bottom: 2px;
+  /* the supplied asset is a JPG with a white ground; multiply blends that
+     away against the canvas instead of showing a white square */
+  mix-blend-mode: multiply;
+}
+.login-product {
+  font-size: 40px;
+  font-weight: 800;
+  color: var(--navy);
+  margin: 0 0 26px;
+  letter-spacing: -0.5px;
+}
+
+.login-card { padding: 30px 32px 26px; text-align: left; }
+.login-welcome {
+  font-size: 22px; font-weight: 700; color: var(--text);
+  margin: 0; text-align: center;
+}
+.login-sub {
+  color: var(--muted); font-size: 13px;
+  margin: 6px 0 26px; text-align: center;
+}
+
+.login-card label.field { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+.login-card input { padding: 11px 12px; font-size: 13px; }
+
+/* password field with the reveal toggle sitting inside it */
+.login-password { position: relative; }
+.login-password input { padding-right: 44px; }
+.login-password .reveal {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer;
+  color: var(--muted); padding: 6px; line-height: 0; border-radius: 6px;
+}
+.login-password .reveal:hover { color: var(--green-dark); }
+
+.login-error { margin-top: 14px; }
+.login-submit { width: 100%; margin-top: 22px; padding: 12px 0; font-size: 14px; }
+
+.login-forgot {
+  display: block; width: 100%; margin-top: 16px;
+  background: none; border: none; cursor: pointer;
+  color: var(--green-dark); font-size: 13px; font-weight: 600;
+}
+.login-forgot:hover { text-decoration: underline; }
+.login-hint {
+  margin: 10px 0 0; text-align: center; line-height: 1.55;
+}
+
+@media (max-width: 520px) {
+  .login-page { padding: 32px 16px; }
+  .login-product { font-size: 32px; }
+  .login-card { padding: 24px 20px 20px; }
 }

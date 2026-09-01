@@ -11,6 +11,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -24,7 +26,25 @@ from .routers import airsizer, hapext
 
 FRONTEND_DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 
-app = FastAPI(title="MAEC", version=__version__)
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Say plainly whether the service is open, so an unset password on a
+    public Render URL cannot pass unnoticed."""
+    if auth.is_enabled():
+        if not os.environ.get("MAEC_SECRET_KEY"):
+            print("MAEC: auth ON, but MAEC_SECRET_KEY is unset — "
+                  "everyone is signed out on restart. Set it in Render.")
+        else:
+            print("MAEC: auth ON (shared account).")
+    elif os.environ.get("RENDER"):
+        print("MAEC: *** WARNING *** deployed with MAEC_PASSWORD unset — "
+              "anyone with the URL can use this app.")
+    else:
+        print("MAEC: auth OFF (MAEC_PASSWORD unset) — fine for local use.")
+    yield
+
+
+app = FastAPI(title="MAEC", version=__version__, lifespan=lifespan)
 
 # ORDER MATTERS. Starlette runs the *last* middleware added as the outermost
 # one, so the guard is registered first and SessionMiddleware second — that
@@ -83,22 +103,6 @@ async def health():
         "auth": "on" if auth.is_enabled() else "off",
     }
 
-
-@app.on_event("startup")
-async def announce_auth() -> None:
-    """Say plainly whether the service is open, so an unset password on a
-    public Render URL cannot pass unnoticed."""
-    if auth.is_enabled():
-        if not os.environ.get("MAEC_SECRET_KEY"):
-            print("MAEC: auth ON, but MAEC_SECRET_KEY is unset — "
-                  "everyone is signed out on restart. Set it in Render.")
-        else:
-            print("MAEC: auth ON (shared password).")
-    elif os.environ.get("RENDER"):
-        print("MAEC: *** WARNING *** deployed with MAEC_PASSWORD unset — "
-              "anyone with the URL can use this app.")
-    else:
-        print("MAEC: auth OFF (MAEC_PASSWORD unset) — fine for local use.")
 
 
 # ---------------------------------------------------------------- frontend

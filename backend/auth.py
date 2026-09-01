@@ -3,8 +3,9 @@
 A Render service has a public URL, so without this anyone holding the link
 could upload reports and pull schedules. This closes that.
 
-**Mode: shared password.** One password for the team, held in the
-`MAEC_PASSWORD` environment variable. No database, no user records, nothing
+**Mode: one shared account, always required.** There is no configuration
+that leaves the app open — an unset `MAEC_PASSWORD` falls back to a built-in
+default rather than disabling the gate. No database, no user records, nothing
 for us to store beyond a single secret that Render already encrypts at rest.
 
 The session is a *signed cookie* — there is no server-side session store, so
@@ -34,22 +35,30 @@ SESSION_MAX_AGE = 12 * 60 * 60          # one working day
 PUBLIC_PREFIXES = ("/api/auth/", "/api/health")
 
 
-# The address the shared login uses. Overridable, but it only matters once a
-# password is set — an email on its own grants nothing.
-DEFAULT_EMAIL = "hapext@mirageaec.com"
+# Signing in is mandatory: there is no configuration that leaves the app open.
+# These defaults exist only so it works out of the box for testing — override
+# both on Render, because anything committed here is visible to everyone with
+# repository access.
+DEFAULT_EMAIL = "mirageaec@mirage.com"
+DEFAULT_PASSWORD = "hapext"
 
 
 def email() -> str:
-    return os.environ.get("MAEC_EMAIL", DEFAULT_EMAIL).strip().lower()
+    return (os.environ.get("MAEC_EMAIL", "").strip() or DEFAULT_EMAIL).lower()
 
 
 def password() -> str:
-    """The configured team password. Empty means auth is switched off."""
-    return os.environ.get("MAEC_PASSWORD", "").strip()
+    return os.environ.get("MAEC_PASSWORD", "").strip() or DEFAULT_PASSWORD
 
 
 def is_enabled() -> bool:
-    return bool(password())
+    """Always. Kept as a function so the frontend contract does not change."""
+    return True
+
+
+def using_default_password() -> bool:
+    """True when nobody has overridden the built-in password."""
+    return not os.environ.get("MAEC_PASSWORD", "").strip()
 
 
 def secret_key() -> str:
@@ -71,16 +80,12 @@ def verify(supplied_email: str, supplied_password: str) -> bool:
     distinguishable by response time.
     """
     expected_password = password()
-    if not expected_password:
-        return False
     email_ok = secrets.compare_digest(supplied_email.strip().lower(), email())
     password_ok = secrets.compare_digest(supplied_password.strip(), expected_password)
     return email_ok and password_ok
 
 
 def is_signed_in(request: Request) -> bool:
-    if not is_enabled():
-        return True                      # nothing to sign in to
     # Deliberately not defensive: if the session is missing here it means
     # SessionMiddleware is not wrapping this call, which is a wiring mistake
     # that must surface loudly rather than quietly denying every request.
@@ -110,9 +115,6 @@ async def me(request: Request):
 
 @router.post("/login")
 async def login(request: Request, payload: dict):
-    if not is_enabled():
-        return {"authenticated": True, "enabled": False, "email": ""}
-
     supplied_email = str(payload.get("email", ""))
     if not verify(supplied_email, str(payload.get("password", ""))):
         # one message for both halves: never reveal which was wrong

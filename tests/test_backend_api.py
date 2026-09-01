@@ -4,8 +4,8 @@ These cover the layer the desktop tests cannot reach: the routers, their
 error paths, and — the point of the whole port — that a request through HTTP
 produces the same bytes the desktop app produces from the same input.
 
-Auth is switched off for this module (no MAEC_PASSWORD); the gate itself is
-covered in test_backend_auth.py.
+Signing in is mandatory, so the client fixture signs in once; the gate
+itself is covered in test_backend_auth.py.
 """
 
 import csv
@@ -44,9 +44,17 @@ SCHEDULE_ROWS = [
 
 
 @pytest.fixture
-def client(monkeypatch):
-    monkeypatch.delenv("MAEC_PASSWORD", raising=False)   # gate off here
-    return TestClient(app)
+def client():
+    """Signed in, so these tests exercise the routers rather than the gate."""
+    from backend import auth
+
+    signed_in = TestClient(app)
+    response = signed_in.post(
+        "/api/auth/login",
+        json={"email": auth.email(), "password": auth.password()},
+    )
+    assert response.status_code == 200, "fixture could not sign in"
+    return signed_in
 
 
 @pytest.fixture
@@ -77,7 +85,7 @@ def test_health_reports_both_modules_and_the_catalogs(client):
     assert body["status"] == "ok"
     assert body["modules"] == ["HAPExt", "AirSizer Pro"]
     assert body["diffusers"] == 5
-    assert body["auth"] == "off"
+    assert body["auth"] == "on"   # signing in is always required
 
 
 # ------------------------------------------------------------------- HAPExt

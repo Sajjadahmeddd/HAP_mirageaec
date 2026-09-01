@@ -28,19 +28,16 @@ FRONTEND_DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Say plainly whether the service is open, so an unset password on a
-    public Render URL cannot pass unnoticed."""
-    if auth.is_enabled():
-        if not os.environ.get("MAEC_SECRET_KEY"):
-            print("MAEC: auth ON, but MAEC_SECRET_KEY is unset — "
-                  "everyone is signed out on restart. Set it in Render.")
-        else:
-            print("MAEC: auth ON (shared account).")
-    elif os.environ.get("RENDER"):
-        print("MAEC: *** WARNING *** deployed with MAEC_PASSWORD unset — "
-              "anyone with the URL can use this app.")
+    """Signing in is always required; say which password is in force so a
+    forgotten override cannot pass unnoticed on a public URL."""
+    if auth.using_default_password():
+        where = "on Render" if os.environ.get("RENDER") else "locally"
+        print(f"MAEC: auth ON, using the BUILT-IN password ({where}). "
+              "Set MAEC_PASSWORD to override it.")
     else:
-        print("MAEC: auth OFF (MAEC_PASSWORD unset) — fine for local use.")
+        print("MAEC: auth ON (MAEC_PASSWORD configured).")
+    if not os.environ.get("MAEC_SECRET_KEY"):
+        print("MAEC: MAEC_SECRET_KEY unset — everyone is signed out on restart.")
     yield
 
 

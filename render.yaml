@@ -28,11 +28,15 @@ services:
       - key: PYTHONUNBUFFERED
         value: "1"
 
-      # The team password. A Render URL is public, so leaving this unset
-      # means anyone with the link can use the app — the service logs a
-      # loud warning at startup if that happens. Set it in the Render
-      # dashboard; sync:false keeps it out of this file and out of git.
+      # Signing in is always required, so leaving these unset does NOT open
+      # the app — it falls back to the built-in credentials in
+      # backend/auth.py, which anyone with repo access can read. Set both in
+      # the Render dashboard before sharing the URL; sync:false keeps them
+      # out of this file and out of git. The service says which password is
+      # in force at startup.
       - key: MAEC_PASSWORD
+        sync: false
+      - key: MAEC_EMAIL
         sync: false
 
       # Signs the session cookie. generateValue makes Render mint a random

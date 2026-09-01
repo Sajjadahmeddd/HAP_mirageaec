@@ -1,9 +1,8 @@
 """The sign-in gate.
 
 A Render service has a public URL, so these tests are the ones that keep the
-app from being open to anyone holding the link. They cover both states: no
-password configured (local development, deliberately open) and a password
-configured (deployment).
+app from being open to anyone holding the link. Signing in is mandatory:
+there must be no configuration under which the API answers a stranger.
 """
 
 import pytest
@@ -40,9 +39,10 @@ def locked(monkeypatch):
 
 
 @pytest.fixture
-def open_app(monkeypatch):
-    """A client with no password configured — how it runs locally."""
+def unconfigured(monkeypatch):
+    """No env vars at all — the built-in credentials must still apply."""
     monkeypatch.delenv("MAEC_PASSWORD", raising=False)
+    monkeypatch.delenv("MAEC_EMAIL", raising=False)
     return TestClient(app)
 
 
@@ -50,13 +50,25 @@ def sign_in(client, email=EMAIL, password=PASSWORD):
     return client.post("/api/auth/login", json={"email": email, "password": password})
 
 
-# ----------------------------------------------------------------- gate off
-def test_without_a_password_the_app_is_open(open_app):
-    assert open_app.get("/api/health").json()["auth"] == "off"
-    body = open_app.get("/api/auth/me").json()
-    assert body["enabled"] is False
-    assert body["authenticated"] is True
-    assert open_app.get("/api/airsizer/config").status_code == 200
+# ------------------------------------------------- there is no "open" mode
+def test_the_gate_cannot_be_switched_off(unconfigured):
+    """With nothing configured the app still demands a sign-in."""
+    assert unconfigured.get("/api/health").json()["auth"] == "on"
+    body = unconfigured.get("/api/auth/me").json()
+    assert body["enabled"] is True
+    assert body["authenticated"] is False
+    assert unconfigured.get("/api/airsizer/config").status_code == 401
+
+
+def test_the_built_in_credentials_work_when_nothing_is_configured(unconfigured):
+    assert sign_in(
+        unconfigured, email=auth.DEFAULT_EMAIL, password=auth.DEFAULT_PASSWORD
+    ).status_code == 200
+
+
+def test_a_configured_password_overrides_the_built_in_one(locked):
+    assert sign_in(locked, password=PASSWORD).status_code == 200
+    assert sign_in(locked, password=auth.DEFAULT_PASSWORD).status_code == 401
 
 
 # ------------------------------------------------------------------ gate on
@@ -157,9 +169,11 @@ def test_a_forged_session_cookie_is_rejected(locked):
 
 
 # --------------------------------------------------------------- the config
-def test_verify_needs_a_configured_password():
+def test_verify_rejects_a_wrong_password(monkeypatch):
     """An email alone grants nothing."""
-    assert auth.verify(EMAIL, "anything") is False    # MAEC_PASSWORD unset here
+    monkeypatch.delenv("MAEC_PASSWORD", raising=False)
+    assert auth.verify(auth.DEFAULT_EMAIL, "anything") is False
+    assert auth.verify(auth.DEFAULT_EMAIL, auth.DEFAULT_PASSWORD) is True
 
 
 def test_requires_auth_covers_the_api_but_not_the_shell():

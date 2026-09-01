@@ -65,16 +65,19 @@ Interactive docs at `/docs`.
 
 A Render service has a **public URL**, so without a gate anyone holding the
 link could upload reports and pull schedules. `backend/auth.py` closes that
-with a shared team password.
+with one shared account, and **signing in is always required** — there is no
+configuration that leaves the app open.
 
 | Variable | Purpose |
 |---|---|
-| `MAEC_PASSWORD` | The team password. **Unset means the app is wide open** — fine locally, dangerous on Render. |
+| `MAEC_EMAIL` | The sign-in address. Defaults to `mirageaec@mirage.com`. |
+| `MAEC_PASSWORD` | The password. Defaults to the built-in one in `auth.py`. |
 | `MAEC_SECRET_KEY` | Signs the session cookie. Changing it signs everyone out. |
 
-The service says which mode it is in at startup, and `/api/health` reports
-`"auth": "on" \| "off"`, so an unset password on a public URL cannot pass
-unnoticed.
+⚠️ Unset does **not** mean open — it means the built-in credentials apply,
+and those are readable by anyone with repository access. Override both before
+sharing a URL. The service prints which password is in force at startup, and
+`/api/health` always reports `"auth": "on"`.
 
 Everything under `/api/` is guarded except `/api/auth/*` and `/api/health`.
 The SPA shell itself is always served — it has to load in order to show a
@@ -89,9 +92,16 @@ survives a restart or a second instance with no shared state. Cookies are
 Registered the other way round, `request.session` does not exist when the
 guard reads it and every request looks signed out.
 
-Run it locally with auth on:
+Run it locally — the login screen appears either way:
 
 ```powershell
+.\.venv\Scripts\python -m uvicorn backend.main:app --port 8000
+```
+
+To use your own credentials instead of the built-in ones:
+
+```powershell
+$env:MAEC_EMAIL = "you@example.com"
 $env:MAEC_PASSWORD = "something"
 .\.venv\Scripts\python -m uvicorn backend.main:app --port 8000
 ```

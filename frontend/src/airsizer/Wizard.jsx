@@ -57,7 +57,7 @@ export default function Wizard({ ctx }) {
             const done = !!ctx.results[space.row]
             return (
               <button className={`btn-row${done ? ' done' : ''}`} onClick={() => setOpenRow(space.row)}>
-                {done ? 'Preview' : 'Click Here'}
+                {done ? 'Preview' : 'Click for sizing'}
               </button>
             )
           }}

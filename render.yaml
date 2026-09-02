@@ -15,7 +15,9 @@ services:
     name: maec
     runtime: python
     plan: starter          # 512 MB is enough; a 350-page parse peaks well under it
-    region: frankfurt      # move this to the region nearest your office
+    region: singapore      # nearest Render region to India; every upload
+                           # crosses this distance. CANNOT be changed after
+                           # the service is created — only by recreating it.
     buildCommand: |
       npm --prefix frontend ci
       npm --prefix frontend run build

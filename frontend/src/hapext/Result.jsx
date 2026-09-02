@@ -6,8 +6,6 @@ import { airsizer, hapext } from '../api'
 import { PreviewTable, SummaryStrip } from '../components.jsx'
 import ProjectDetails from './ProjectDetails.jsx'
 
-const PREVIEW_ROWS = 4
-
 export default function Result({ ctx }) {
   const [showDetails, setShowDetails] = useState(false)
   const [pendingFormat, setPendingFormat] = useState(null)
@@ -21,7 +19,6 @@ export default function Result({ ctx }) {
   }
 
   const { header, rows, stats, source, base_name: baseName } = conversion
-  const preview = rows.slice(0, PREVIEW_ROWS)
 
   const send = async (fmt, details, logo) => {
     setBusy(true)
@@ -87,15 +84,14 @@ export default function Result({ ctx }) {
       ]} />
 
       <span className="sheet-tab">HAP Zone Sizing Summary</span>
-      <PreviewTable header={header} rows={preview} isUnit={(r) => !!preview[r][2]} />
+      {/* every row, scrolling inside the card — the engineer reviews the
+          whole schedule here before downloading it */}
+      <PreviewTable header={header} rows={rows} isUnit={(r) => !!rows[r][2]} />
 
       {error && <div className="status-fail">{error}</div>}
 
       <div className="row">
         <div className="grow">
-          <div className="small">
-            Previewing the first {Math.min(PREVIEW_ROWS, rows.length)} records from the converted schedule.
-          </div>
           <div className="small">
             {header.length} extracted columns • {stats.rows ?? rows.length} records •
             Review the extracted HAP schedule before downloading.

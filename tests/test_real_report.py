@@ -75,5 +75,5 @@ def test_full_conversion_passes_gate_and_writes_csv(tmp_path, config):
     assert content.count("\r\n") == 1 + 212 + 601
     first_data_line = content.splitlines()[1]
     assert first_data_line == (
-        "#01-9FCorridor1(LIFT),178.2,9.2,8.6,,23.5 / 16.7,13.2 / 12.5,0.24,51.63,,9.2,,,"
+        "#01-9FCorridor1(LIFT),178.2,9.2,8.6,689,23.5 / 16.7,13.2 / 12.5,0.24,51.63,,9.2,,,"
     )

@@ -9,6 +9,8 @@ themselves are never touched:
 - W/m²   = Total Coil Load ÷ Floor Area × 1000
 - Total kW = Total Coil Load × Qty (Qty is manual/blank at export, so the
   configured qty_default of "1" is used; the engineer edits Qty afterwards)
+- Air Flow on the unit header row = sum of its spaces' air flows (the HAP
+  report states air flow per space only)
 """
 
 from __future__ import annotations
@@ -36,6 +38,20 @@ def _w_per_m2(unit: Unit, decimals: int) -> str:
 
 def _total_kw(unit: Unit, qty_default: str) -> str:
     return format(_to_decimal(unit.total_coil) * _to_decimal(qty_default), "f")
+
+
+def _unit_air_flow(unit: Unit) -> str:
+    """Sum of the spaces' air flows, blank when no space carries one.
+
+    The HAP report gives air flow per space and nothing at zone level, so
+    this is the one zone-level figure that has to be derived rather than
+    extracted. Decimal keeps the sum exact.
+    """
+    flows = [space.air_flow.strip() for space in unit.spaces if space.air_flow.strip()]
+    if not flows:
+        return ""
+    total = sum(_to_decimal(flow) for flow in flows)
+    return format(total, "f")
 
 
 # Mandatory project details entered in the UI before download (FR: FCU
@@ -99,7 +115,7 @@ def build_rows(units: list[Unit], config: Config) -> list[list[str]]:
         unit_row[1] = unit.floor_area
         unit_row[2] = unit.total_coil
         unit_row[3] = unit.sens_coil
-        # col 4 (Air Flow) stays blank on the unit header row
+        unit_row[4] = _unit_air_flow(unit)
         unit_row[5] = unit.coil_entering
         unit_row[6] = unit.coil_leaving
         unit_row[7] = unit.water_flow

@@ -28,8 +28,9 @@ def test_header_row_first(config):
 def test_unit_header_row(config):
     unit_row = synthesizer.build_rows([make_unit()], config)[1]
     # 9.2 / 178.2 * 1000 = 51.6273... -> 51.63 at 2 decimals
+    # air flow 831 = 689 + 142, the spaces' flows summed
     assert unit_row == [
-        "#01-9FCorridor1(LIFT)", "178.2", "9.2", "8.6", "", "23.5 / 16.7",
+        "#01-9FCorridor1(LIFT)", "178.2", "9.2", "8.6", "831", "23.5 / 16.7",
         "13.2 / 12.5", "0.24", "51.63", "", "9.2", "", "", "",
     ]
 
@@ -38,6 +39,27 @@ def test_total_kw_preserves_input_scale(config):
     # qty_default = 1: Total KW must reproduce the coil load string exactly
     unit_row = synthesizer.build_rows([make_unit()], config)[1]
     assert unit_row[10] == "9.2"
+
+
+def test_unit_air_flow_is_the_sum_of_its_spaces(config):
+    unit_row = synthesizer.build_rows([make_unit()], config)[1]
+    assert unit_row[4] == "831"  # 689 + 142
+
+
+def test_unit_air_flow_sum_is_exact_decimal(config):
+    unit = make_unit()
+    unit.spaces[0].air_flow = "688.5"
+    unit.spaces[1].air_flow = "142.25"
+    unit_row = synthesizer.build_rows([unit], config)[1]
+    assert unit_row[4] == "830.75"  # Decimal, never float
+
+
+def test_unit_air_flow_blank_when_no_space_has_one(config):
+    unit = make_unit()
+    for space in unit.spaces:
+        space.air_flow = ""
+    unit_row = synthesizer.build_rows([unit], config)[1]
+    assert unit_row[4] == ""
 
 
 def test_space_rows(config):

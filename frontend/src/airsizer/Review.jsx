@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { airsizer } from '../api'
-import { PreviewTable, StepChips, SummaryStrip } from '../components.jsx'
+import { Modal, PreviewTable, StepChips, SummaryStrip } from '../components.jsx'
 import SizingPanel from './SizingPanel.jsx'
 import { STEPS, rowTint } from './Wizard.jsx'
 
@@ -81,6 +81,7 @@ export default function Review({ ctx }) {
   const [stage, setStage] = useState(3)
   const [busy, setBusy] = useState(false)
   const [downloaded, setDownloaded] = useState(false)
+  const [confirmUnsized, setConfirmUnsized] = useState(false)
   const [error, setError] = useState('')
   const [openRow, setOpenRow] = useState(null)
 
@@ -104,6 +105,8 @@ export default function Review({ ctx }) {
 
   const results = Object.values(ctx.results)
   const sized = results.filter((r) => r.ok).length
+  const sizableCount = ctx.spaces.filter((s) => s.sizable).length
+  const unsized = sizableCount - sized
   const failed = results.filter((r) => !r.ok).length
   const interpolated = results.filter((r) => r.ok && r.interpolated).length
 
@@ -198,7 +201,11 @@ export default function Review({ ctx }) {
             Project Summary
           </button>
         ) : (
-          <button className="btn btn-primary" disabled={sized === 0 || busy} onClick={exportFile}>
+          <button
+            className="btn btn-primary"
+            disabled={sized === 0 || busy}
+            onClick={() => (unsized > 0 ? setConfirmUnsized(true) : exportFile())}
+          >
             {busy ? 'Generating…' : downloaded ? 'Download again' : 'Generate Excel'}
           </button>
         )}
@@ -206,6 +213,24 @@ export default function Review({ ctx }) {
 
       {openRow !== null && (
         <SizingPanel ctx={ctx} startRow={openRow} onClose={() => setOpenRow(null)} />
+      )}
+
+      {confirmUnsized && (
+        <Modal title="Some subspaces are not sized yet" onClose={() => setConfirmUnsized(false)} width={460}>
+          <p className="muted">
+            {unsized} of {sizableCount} subspaces have no sizing — their sizing
+            columns will be blank in the workbook. Generate it anyway?
+          </p>
+          <div className="row" style={{ justifyContent: 'flex-end' }}>
+            <button className="btn btn-secondary" onClick={() => setConfirmUnsized(false)}>Cancel</button>
+            <button
+              className="btn btn-primary"
+              onClick={() => { setConfirmUnsized(false); exportFile() }}
+            >
+              Generate anyway
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   )

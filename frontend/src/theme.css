@@ -223,8 +223,11 @@ select:disabled, input:disabled { background: var(--field); color: #A0A3AC; curs
 .field-caption { font-size: 11px; font-weight: 700; text-align: center; margin-bottom: 4px; }
 .form-row { display: grid; grid-template-columns: 190px 1fr; align-items: center; gap: 14px; margin-bottom: 10px; }
 .form-row > span { font-size: 12px; font-weight: 700; }
-.diagram-frame { background: #fff; border: 1px solid #C9C9C2; border-radius: 10px; padding: 10px; display: flex; align-items: center; justify-content: center; min-height: 170px; }
-.diagram-frame img { max-width: 100%; max-height: 190px; }
+/* Fixed box: the five construction drawings have different natural sizes,
+   and a frame that follows them makes the whole dialog jump when the
+   diffuser type changes. The image letterboxes inside instead. */
+.diagram-frame { background: #fff; border: 1px solid #C9C9C2; border-radius: 10px; padding: 10px; display: flex; align-items: center; justify-content: center; height: 210px; }
+.diagram-frame img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .btn-sizing { background: var(--green); color: #fff; border: none; border-radius: 22px; padding: 12px 46px; font-size: 17px; font-weight: 800; cursor: pointer; align-self: center; }
 .btn-sizing:hover:not(:disabled) { background: var(--green-dark); }
 .btn-sizing:disabled { background: #B8BEA8; color: #EFEFEA; cursor: not-allowed; }

@@ -111,6 +111,7 @@ async def get_config():
             for c in config.result_columns
         ],
         "input_columns": config.input_columns,
+        "interpolation_remark": config.interpolation_remark,
     }
 
 

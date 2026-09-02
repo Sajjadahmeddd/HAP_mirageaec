@@ -34,7 +34,7 @@ def sized(air_config):
 def test_default_columns_come_from_the_config(air_config):
     columns = export.visible_columns(air_config, None)
     assert [c.key for c in columns] == [
-        "name", "floor_area", "total_coil", "air_flow", "lsm", "length",
+        "name", "floor_area", "total_coil", "air_flow", "lsm", "length", "remarks",
     ]
 
 
@@ -52,12 +52,37 @@ def test_rows_follow_the_schedule_and_blank_the_unsized(sized, air_config):
 
     assert header == ["Zone Name / Space Name", "Floor Area (m²)",
                       "Total Coil Load (KW)", "Air Flow (L/s)",
-                      "Air Flow (L/s/m)", "Air Outlet Length (m) / Nos"]
+                      "Air Flow (L/s/m)", "Air Outlet Length (m) / Nos",
+                      "Remarks"]
     assert len(rows) == 3
     assert rows[0][:4] == ["#01-9F-Corridor1", "172.3", "13.2", ""]
-    assert rows[0][4:] == ["", ""]                    # unit rows carry no sizing
-    assert rows[1] == ["#01A-9FCorridor1", "154.4", "", "868", "100", "8.68 / 9"]
-    assert rows[2][4:] == ["", ""]                    # not sized yet
+    assert rows[0][4:] == ["", "", ""]                # unit rows carry no sizing
+    assert rows[1] == ["#01A-9FCorridor1", "154.4", "", "868", "100", "8.68 / 9", ""]
+    assert rows[2][4:] == ["", "", ""]                # not sized yet
+
+
+def test_remarks_carry_the_interpolation_sentence(sized, air_config):
+    """An interpolated row gets the exact sentence the sizing panel shows."""
+    import dataclasses
+
+    spaces, inputs, results = sized
+    results = {8: dataclasses.replace(results[8], interpolated=True)}
+    columns = export.visible_columns(air_config, ["remarks"])
+    header, rows = export.build_rows(spaces, inputs, results, air_config, columns)
+
+    assert header == ["Zone Name / Space Name", "Remarks"]
+    assert air_config.interpolation_remark            # the config carries it
+    assert rows[1][1] == air_config.interpolation_remark
+    assert rows[0][1] == ""                           # unit header row
+    assert rows[2][1] == ""                           # unsized row
+
+
+def test_remarks_blank_when_the_reading_was_exact(sized, air_config):
+    spaces, inputs, results = sized
+    assert results[8].interpolated is False           # fixture is an exact hit
+    columns = export.visible_columns(air_config, ["remarks"])
+    _, rows = export.build_rows(spaces, inputs, results, air_config, columns)
+    assert rows[1][1] == ""
 
 
 def test_row_state_drives_the_highlighting(sized, air_config):

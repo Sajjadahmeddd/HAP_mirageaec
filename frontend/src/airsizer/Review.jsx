@@ -11,7 +11,7 @@ import { PreviewTable, StepChips, SummaryStrip } from '../components.jsx'
 import SizingPanel from './SizingPanel.jsx'
 import { STEPS, rowTint } from './Wizard.jsx'
 
-function cellValue(key, space, entry, result) {
+function cellValue(key, space, entry, result, interpRemark) {
   switch (key) {
     case 'name': return space.name
     case 'floor_area': return space.floor_area
@@ -36,6 +36,7 @@ function cellValue(key, space, entry, result) {
     case 'velocity_out': return result.velocity
     case 'pt': return result.pt
     case 'interpolated': return result.interpolated ? 'Yes' : ''
+    case 'remarks': return result.interpolated ? interpRemark : ''
     default: return ''
   }
 }
@@ -97,7 +98,8 @@ export default function Review({ ctx }) {
     const entry = ctx.sizingInputs[space.row]
     const result = ctx.results[space.row]
     const withLabel = entry ? { ...entry, label: labelFor(entry.diffuser) } : null
-    return columns.map((c) => cellValue(c.key, space, withLabel, result))
+    return columns.map((c) =>
+      cellValue(c.key, space, withLabel, result, ctx.airConfig.interpolation_remark || ''))
   })
 
   const results = Object.values(ctx.results)
@@ -180,7 +182,11 @@ export default function Review({ ctx }) {
       </div>
 
       <div className="row">
-        <button className="btn btn-secondary" onClick={() => ctx.setPage('air-wizard')}>Back to sizing</button>
+        {stage === 4 ? (
+          <button className="btn btn-secondary" onClick={() => setStage(3)}>Review Results</button>
+        ) : (
+          <button className="btn btn-secondary" onClick={() => ctx.setPage('air-wizard')}>Back to sizing</button>
+        )}
         <div className="grow" />
         {stage === 3 ? (
           <button

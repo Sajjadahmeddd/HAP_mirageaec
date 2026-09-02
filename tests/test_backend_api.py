@@ -313,6 +313,7 @@ def test_config_exposes_the_input_matrix_that_drives_the_form(client):
     assert slot["options"]["slot_width"] == ["16", "20", "25"]   # per-type override
 
     assert any(c["locked"] for c in body["result_columns"])      # the name column
+    assert "interpolated value" in body["interpolation_remark"]
 
 
 def test_every_diffuser_serves_its_diagram(client):

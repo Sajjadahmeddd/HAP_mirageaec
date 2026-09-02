@@ -237,7 +237,7 @@ export default function SizingPanel({ ctx, startRow, onClose }) {
 
           {result?.ok && result.interpolated && (
             <div className="banner-interp">
-              No exact match — interpolated value. Read between the two nearest catalogue entries.
+              {ctx.airConfig.interpolation_remark}
             </div>
           )}
           {result && !result.ok && <div className="banner-fail">{result.message}</div>}

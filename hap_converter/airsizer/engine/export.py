@@ -97,6 +97,10 @@ def cell_value(
         return result.pt
     if column_key == "interpolated":
         return "Yes" if result.interpolated else ""
+    if column_key == "remarks":
+        # the same sentence the sizing panel shows for a value read between
+        # two catalogue entries; one source of truth in input_matrix.json
+        return config.interpolation_remark if result.interpolated else ""
     return ""
 
 

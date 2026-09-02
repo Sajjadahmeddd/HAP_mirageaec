@@ -1,5 +1,7 @@
 {
   "schema": 1,
+
+  "interpolation_remark": "No exact match — interpolated value. Read between the two nearest catalogue entries.",
   "input_columns": {
     "name": "Zone Name / Space Name",
     "floor_area": "Floor Area (m²)",
@@ -61,6 +63,7 @@
     {"key": "velocity_out","label": "Velocity (m/s)",         "default": false},
     {"key": "pt",          "label": "Pt (Pa)",                "default": false},
     {"key": "interpolated","label": "Interpolated",           "default": false},
-    {"key": "status",      "label": "Status",                 "default": false}
+    {"key": "status",      "label": "Status",                 "default": false},
+    {"key": "remarks",     "label": "Remarks",                "default": true}
   ]
 }

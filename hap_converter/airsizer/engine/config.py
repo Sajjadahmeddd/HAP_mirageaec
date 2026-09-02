@@ -201,6 +201,7 @@ class Config:
     catalogs: dict[str, Catalog]
     parameters: Parameters
     result_columns: tuple[ResultColumn, ...]
+    interpolation_remark: str
     diagram_dir: Path
 
     def diffuser(self, key: str) -> DiffuserSpec:
@@ -431,5 +432,6 @@ def load(path: str | Path) -> Config:
             )
             for c in raw["result_columns"]
         ),
+        interpolation_remark=str(raw.get("interpolation_remark", "")),
         diagram_dir=path.parent / "diagrams",
     )

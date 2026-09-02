@@ -75,7 +75,7 @@ export default function Wizard({ ctx }) {
           title="Review the sized schedule before exporting"
           onClick={() => ctx.setPage('air-review')}
         >
-          Generate Excel
+          Review Results
         </button>
       </div>
 

@@ -120,6 +120,8 @@ h2.h2, .h2 { font-size: 15px; font-weight: 700; margin: 0; }
 .btn-row { background: var(--green); color: #fff; border: none; border-radius: 10px; padding: 4px 18px; font-size: 10px; font-weight: 700; cursor: pointer; }
 .btn-row:hover { background: var(--green-dark); }
 .btn-row.done { background: var(--green-dark); }
+.btn-row.todo { background: transparent; color: var(--green-dark); border: 1px solid var(--green); }
+.btn-row.todo:hover { background: var(--green-soft); }
 
 /* ---------- drop zone ---------- */
 .dropzone {

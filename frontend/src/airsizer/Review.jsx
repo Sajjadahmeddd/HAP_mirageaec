@@ -79,6 +79,7 @@ function ColumnPicker({ columns, visible, onChange }) {
 export default function Review({ ctx }) {
   const [stage, setStage] = useState(3)
   const [busy, setBusy] = useState(false)
+  const [downloaded, setDownloaded] = useState(false)
   const [error, setError] = useState('')
   const [openRow, setOpenRow] = useState(null)
 
@@ -116,7 +117,7 @@ export default function Review({ ctx }) {
         project_name: ctx.airSource,
       })
       ctx.rememberSizing()          // keep it in this browser's history
-      setStage(4)
+      setDownloaded(true)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -144,7 +145,7 @@ export default function Review({ ctx }) {
             ['ROWS', String(rows.length)],
             ['COLUMNS', String(columns.length)],
             ['SIZED', String(sized)],
-            ['STATUS', 'Downloaded', 'ok'],
+            ['STATUS', downloaded ? 'Downloaded' : 'Ready to generate', downloaded ? 'ok' : ''],
           ]} />
         )}
 
@@ -162,8 +163,14 @@ export default function Review({ ctx }) {
           actions={stage === 3 ? (r) => {
             const space = ctx.spaces[r]
             if (!space.sizable) return null
+            const done = !!ctx.results[space.row]
             return (
-              <button className="btn-row" onClick={() => setOpenRow(space.row)}>Preview</button>
+              <button
+                className={`btn-row${done ? '' : ' todo'}`}
+                onClick={() => setOpenRow(space.row)}
+              >
+                {done ? 'Preview' : 'Yet to be sized'}
+              </button>
             )
           } : null}
         />
@@ -175,9 +182,20 @@ export default function Review({ ctx }) {
       <div className="row">
         <button className="btn btn-secondary" onClick={() => ctx.setPage('air-wizard')}>Back to sizing</button>
         <div className="grow" />
-        <button className="btn btn-primary" disabled={sized === 0 || busy} onClick={exportFile}>
-          {busy ? 'Generating…' : stage === 3 ? 'Generate Excel' : 'Download Excel'}
-        </button>
+        {stage === 3 ? (
+          <button
+            className="btn btn-primary"
+            disabled={sized === 0}
+            title="Review the roll-up, then generate the workbook from the summary"
+            onClick={() => setStage(4)}
+          >
+            Project Summary
+          </button>
+        ) : (
+          <button className="btn btn-primary" disabled={sized === 0 || busy} onClick={exportFile}>
+            {busy ? 'Generating…' : downloaded ? 'Download again' : 'Generate Excel'}
+          </button>
+        )}
       </div>
 
       {openRow !== null && (

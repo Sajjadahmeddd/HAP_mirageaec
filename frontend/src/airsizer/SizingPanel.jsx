@@ -249,8 +249,8 @@ export default function SizingPanel({ ctx, startRow, onClose }) {
             </div>
           ))}
 
-          <div className="small" style={{ textAlign: 'right' }}>{derived}</div>
-          <div className="saved-hint">{hint}</div>
+          <div className="output-note"><span className="small">{derived}</span></div>
+          <div className="output-note"><span className="saved-hint">{hint}</span></div>
           <div className="grow" />
 
           <div className="row">

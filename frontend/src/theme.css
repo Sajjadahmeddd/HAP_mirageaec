@@ -207,6 +207,10 @@ input[type=text], input[type=email], input[type=password], input[type=date], sel
   background: #fff; color: var(--text); border: 1px solid var(--border);
   border-radius: 8px; padding: 7px 10px; font-size: 12px; width: 100%; font-family: inherit;
 }
+/* A select renders its own text 4px further in than an input does at the
+   same padding, so side by side their values never lined up. Measured in
+   Chrome; taking that 4px back off the left padding squares them exactly. */
+select { padding-left: 6px; }
 input:focus, select:focus { border-color: var(--green); outline: none; }
 select:disabled, input:disabled { background: var(--field); color: #A0A3AC; cursor: not-allowed; }
 
@@ -217,7 +221,11 @@ select:disabled, input:disabled { background: var(--field); color: #A0A3AC; curs
 /* ---------- sizing panel ---------- */
 .sizing-grid { display: grid; grid-template-columns: 11fr 9fr; gap: 16px; }
 .sizing-form { background: var(--panel); border: 1px solid #C9C9C2; border-radius: 14px; padding: 16px 20px; }
-.sizing-side { background: var(--panel-side); border-radius: 14px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+.sizing-side {
+  --readout-label: 140px;      /* shared by the rows and the notes below them */
+  background: var(--panel-side); border-radius: 14px; padding: 18px 20px;
+  display: flex; flex-direction: column; gap: 14px;
+}
 .readonly-field { background: var(--field); border: 1px solid #C9C9C2; border-radius: 8px; padding: 8px 12px; font-size: 12px; text-align: center; }
 .field-caption { font-size: 11px; font-weight: 700; text-align: center; margin-bottom: 4px; }
 .form-row { display: grid; grid-template-columns: 190px 1fr; align-items: center; gap: 14px; margin-bottom: 10px; }
@@ -230,8 +238,13 @@ select:disabled, input:disabled { background: var(--field); color: #A0A3AC; curs
 .btn-sizing { background: var(--green); color: #fff; border: none; border-radius: 22px; padding: 12px 46px; font-size: 17px; font-weight: 800; cursor: pointer; align-self: center; }
 .btn-sizing:hover:not(:disabled) { background: var(--green-dark); }
 .btn-sizing:disabled { background: #B8BEA8; color: #EFEFEA; cursor: not-allowed; }
-.output-row { display: grid; grid-template-columns: 140px 1fr; align-items: center; gap: 12px; }
+.output-row { display: grid; grid-template-columns: var(--readout-label) 1fr; align-items: center; gap: 12px; }
 .output-row > span { font-size: 12px; font-weight: 700; }
+/* The derived figures and the save confirmation describe the values above
+   them, so they sit centred over that column rather than adrift on the
+   panel's right edge. */
+.output-note { display: grid; grid-template-columns: var(--readout-label) 1fr; gap: 12px; }
+.output-note > * { grid-column: 2; text-align: center; }
 .output-field { background: var(--field); border: 1px solid #C9C9C2; border-radius: 8px; padding: 9px 14px; font-size: 12px; font-weight: 700; text-align: center; }
 .output-field.pending, .output-field.na { color: #A0A3AC; font-weight: 600; }
 .output-field.interpolated { background: var(--amber-soft); border-color: var(--amber-line); color: var(--amber-ink); }
@@ -242,7 +255,7 @@ select:disabled, input:disabled { background: var(--field); color: #A0A3AC; curs
 .spinner button:hover:not(:disabled) { color: var(--green-dark); }
 .spinner button:disabled { color: #C7C9CF; cursor: not-allowed; }
 .position { color: var(--muted); font-size: 11px; font-weight: 700; white-space: nowrap; }
-.saved-hint { color: var(--green-dark); font-size: 11px; font-weight: 700; text-align: right; min-height: 15px; }
+.saved-hint { color: var(--green-dark); font-size: 11px; font-weight: 700; min-height: 15px; }
 
 /* ---------- banners ---------- */
 .banner-interp { background: var(--amber-soft); border: 1px solid var(--amber-line); border-radius: 10px; padding: 8px 12px; color: var(--amber-ink); font-size: 11px; font-weight: 700; }

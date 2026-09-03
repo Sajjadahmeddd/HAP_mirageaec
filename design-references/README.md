@@ -14,14 +14,6 @@ transparent and the white letterforms recoloured to navy, giving the
 light-background lockup the reference uses. `public/maec-logo-dark.png` keeps
 the original for use on dark surfaces.
 
-## Missing: the AirSizer Pro hero
-
-`AirsizerPro home page.png` arrived truncated — the copy stopped about a third
-of the way in, so it has no PNG end marker and cannot be decoded. Save it again
-as:
-
-    frontend/public/airsizer-home.jpg
-
-`airsizer/Home.jsx` already points there and falls back to the drawn `DuctArt`
-until the file exists, so the page is never broken — the artwork simply appears
-once the file lands.
+`public/airsizer-home.png` is the supplied artwork, resampled to 1200 px and
+reduced to a 256-colour palette (2.17 MB -> 186 KB). Its alpha channel is kept,
+so the drawing sits directly on the page canvas rather than in a box.

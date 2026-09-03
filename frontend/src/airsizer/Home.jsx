@@ -57,7 +57,7 @@ export default function Home({ ctx }) {
         </div>
         <div className="hero-slot">
           <HeroImage
-            src="/airsizer-home.jpg"
+            src="/airsizer-home.png"
             alt="Duct network with airflow and performance readouts"
             fallback={DuctArt}
           />

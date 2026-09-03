@@ -194,8 +194,7 @@ export default function App() {
   return (
     <div className="shell">
       <div className="titlebar">
-        <img src="/logo.png" alt="" onError={(e) => { e.currentTarget.style.display = 'none' }} />
-        <span className="brand">M<span className="accent">AEC</span></span>
+        <img className="titlebar-logo" src="/maec-logo.png" alt="MAEC" />
         <span className="version">v{VERSION}</span>
         {session.enabled && (
           <>

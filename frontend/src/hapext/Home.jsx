@@ -31,7 +31,7 @@ export default function Home({ ctx }) {
     <div className="split">
       <div className="col">
         <div className="muted">Welcome to</div>
-        <h1 className="h1">Mirage <span style={{ color: 'var(--blue)' }}>AEC</span></h1>
+        <h1 className="h1">HAP<span style={{ color: 'var(--blue)' }}>Ext</span></h1>
         <div style={{ color: 'var(--blue)', fontSize: 10 }}>▬ ▪</div>
         <div className="muted" style={{ whiteSpace: 'pre-line' }}>
           {'Powerful tools for HVAC design and analysis.\nSimplify your workflow with intelligent\nautomation and precise calculations.'}

@@ -1,4 +1,4 @@
-import { BuildingArt } from '../HeroArt.jsx'
+import { BuildingArt, HeroImage } from '../HeroArt.jsx'
 import RecentPanel from '../RecentPanel.jsx'
 import { HAPEXT } from '../recents'
 
@@ -36,7 +36,13 @@ export default function Home({ ctx }) {
         <div className="muted" style={{ whiteSpace: 'pre-line' }}>
           {'Powerful tools for HVAC design and analysis.\nSimplify your workflow with intelligent\nautomation and precise calculations.'}
         </div>
-        <div className="grow" style={{ display: 'flex', alignItems: 'center' }}><BuildingArt /></div>
+        <div className="hero-slot">
+          <HeroImage
+            src="/hapext-home.jpg"
+            alt="HVAC system model with load, airflow and design summary readouts"
+            fallback={BuildingArt}
+          />
+        </div>
         <div className="feature-band">
           {FEATURES.map((f) => <div key={f}>{f}</div>)}
         </div>

@@ -4,7 +4,7 @@
 import { useRef, useState } from 'react'
 import { airsizer } from '../api'
 import { Modal } from '../components.jsx'
-import { DuctArt } from '../HeroArt.jsx'
+import { DuctArt, HeroImage } from '../HeroArt.jsx'
 import RecentPanel from '../RecentPanel.jsx'
 import { AIRSIZER } from '../recents'
 
@@ -55,7 +55,13 @@ export default function Home({ ctx }) {
         <div className="muted" style={{ whiteSpace: 'pre-line' }}>
           {'Design and size air distribution systems\nwith catalog-based diffuser selection,\nperformance checks and clear project results.'}
         </div>
-        <div className="grow" style={{ display: 'flex', alignItems: 'center' }}><DuctArt /></div>
+        <div className="hero-slot">
+          <HeroImage
+            src="/airsizer-home.jpg"
+            alt="Duct network with airflow and performance readouts"
+            fallback={DuctArt}
+          />
+        </div>
         <div className="feature-band">
           {FEATURES.map((f) => <div key={f}>{f}</div>)}
         </div>

@@ -26,3 +26,6 @@ output/
 .env
 .env.*
 !.env.example
+
+# ---- Incomplete asset transfers (re-save the source, don't commit a partial)
+design-references/*TRUNCATED*

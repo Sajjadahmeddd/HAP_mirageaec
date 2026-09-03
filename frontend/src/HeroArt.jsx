@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 // The hero artwork behind each module's welcome text — SVG stand-ins for the
 // QPainter drawings in home_page.py (HeroArt) and airsizer/home_page.py
 // (DuctArt).
@@ -44,5 +46,20 @@ export function DuctArt() {
         <line x1="210" y1="114" x2="265" y2="156" />
       </g>
     </svg>
+  )
+}
+
+/** The supplied module artwork, falling back to the drawing above if the
+ *  image is missing so a home screen never renders a broken-image icon. */
+export function HeroImage({ src, alt, fallback: Fallback }) {
+  const [failed, setFailed] = useState(false)
+  if (failed) return <Fallback />
+  return (
+    <img
+      className="hero-image"
+      src={src}
+      alt={alt}
+      onError={() => setFailed(true)}
+    />
   )
 }

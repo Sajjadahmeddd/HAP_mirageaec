@@ -1,6 +1,8 @@
 // The mandatory project-details block that heads the downloaded schedule.
 // Ported from hap_converter/ui/project_details_dialog.py — all 8 fields plus
-// the company logo are required before a download is allowed.
+// the client's logo are required before a download is allowed. The logo is
+// the client's own: these schedules are issued to them, so it heads the
+// sheet rather than MAEC's mark.
 
 import { useState } from 'react'
 import { Modal } from '../components.jsx'
@@ -44,7 +46,7 @@ export default function ProjectDetails({ initial, initialLogo, onSave, onClose }
     const missing = PROJECT_FIELDS
       .filter(([key]) => key !== 'date' && !String(values[key] || '').trim())
       .map(([, label]) => label.replace(':', ''))
-    if (!logo) missing.unshift('Company Logo')
+    if (!logo) missing.unshift('Client Logo')
     if (missing.length) {
       setError(`Please fill: ${missing.join(', ')}`)
       return
@@ -63,7 +65,7 @@ export default function ProjectDetails({ initial, initialLogo, onSave, onClose }
       </p>
 
       <div style={{ marginBottom: 12 }}>
-        <label className="field">Company Logo:</label>
+        <label className="field">Client Logo:</label>
         <div className="row">
           <div style={{
             width: 90, height: 34, border: '1px solid var(--border)', borderRadius: 6,

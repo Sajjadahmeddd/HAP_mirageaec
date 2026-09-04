@@ -21,6 +21,7 @@ import ChangeRequest from './hapext/ChangeRequest.jsx'
 import ChangeReview from './hapext/ChangeReview.jsx'
 
 import AirHome from './airsizer/Home.jsx'
+import AirUpload from './airsizer/Upload.jsx'
 import AirWizard from './airsizer/Wizard.jsx'
 import AirReview from './airsizer/Review.jsx'
 
@@ -187,6 +188,7 @@ export default function App() {
     'hap-change': ChangeRequest,
     'hap-change-review': ChangeReview,
     'air-home': AirHome,
+    'air-upload': AirUpload,
     'air-wizard': AirWizard,
     'air-review': AirReview,
   }

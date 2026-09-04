@@ -1,8 +1,7 @@
 // AirSizer Pro home — hero, Quick Start, Recent Projects, Help.
 // Ported from hap_converter/airsizer/ui/home_page.py.
 
-import { useRef, useState } from 'react'
-import { airsizer } from '../api'
+import { useState } from 'react'
 import { Modal } from '../components.jsx'
 import { DuctArt, HeroImage } from '../HeroArt.jsx'
 import RecentPanel from '../RecentPanel.jsx'
@@ -28,23 +27,7 @@ function QuickCard({ glyph, title, body, enabled, onClick }) {
 }
 
 export default function Home({ ctx }) {
-  const input = useRef(null)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
   const [help, setHelp] = useState(false)
-
-  const pick = async (file) => {
-    if (!file) return
-    setBusy(true)
-    setError('')
-    try {
-      ctx.loadSpaces(await airsizer.load(file))
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setBusy(false)
-    }
-  }
 
   return (
     <div className="split">
@@ -73,7 +56,7 @@ export default function Home({ ctx }) {
           <QuickCard
             glyph="▦" title="Size Diffusers"
             body="Select catalog products and check performance."
-            enabled={!busy} onClick={() => input.current?.click()}
+            enabled onClick={() => ctx.setPage('air-upload')}
           />
           <QuickCard
             glyph="◷" title="Review Results"
@@ -81,12 +64,6 @@ export default function Home({ ctx }) {
             enabled={ctx.spaces.length > 0} onClick={() => ctx.setPage('air-review')}
           />
         </div>
-        <input
-          ref={input} type="file" accept=".xlsx,.csv" style={{ display: 'none' }}
-          onChange={(e) => { pick(e.target.files?.[0]); e.target.value = '' }}
-        />
-        {busy && <div className="muted">Reading schedule…</div>}
-        {error && <div className="banner-fail">{error}</div>}
 
         <h2 className="h2">Recent Projects</h2>
         <RecentPanel

@@ -3,13 +3,20 @@
 
 import { useEffect, useRef, useState } from 'react'
 
-export function PdfBadge({ size = 40 }) {
+/** The file-type stamp above a drop zone. `kind` also picks its colour, so
+ *  a schedule does not announce itself in the PDF red. */
+export function FileBadge({ size = 40, kind = 'PDF' }) {
   return (
-    <span className="pdf-badge" style={{ width: size, height: size, fontSize: Math.max(8, size / 4.5) }}>
-      PDF
+    <span
+      className={`pdf-badge kind-${kind.toLowerCase()}`}
+      style={{ width: size, height: size, fontSize: Math.max(8, size / 4.5) }}
+    >
+      {kind}
     </span>
   )
 }
+
+export const PdfBadge = (props) => <FileBadge {...props} kind="PDF" />
 
 export function InfoCard({ title, body }) {
   return (
@@ -27,7 +34,7 @@ export const INFO_CARDS = [
 ]
 
 /** Drag-and-drop + browse, matching the desktop DropZone's three states. */
-export function DropZone({ accept, prompt, hint, onFile, file, meta, error, compact }) {
+export function DropZone({ accept, prompt, hint, onFile, file, meta, error, compact, badge = 'PDF' }) {
   const input = useRef(null)
   const [active, setActive] = useState(false)
 
@@ -47,7 +54,7 @@ export function DropZone({ accept, prompt, hint, onFile, file, meta, error, comp
       onDragLeave={() => setActive(false)}
       onDrop={onDrop}
     >
-      {!compact && <PdfBadge size={52} />}
+      {!compact && <FileBadge size={52} kind={badge} />}
       <div className="h2">{file ? file.name : prompt}</div>
       <div className="muted">{file ? meta : 'or'}</div>
       <button className="btn btn-secondary" onClick={() => input.current?.click()}>Browse</button>

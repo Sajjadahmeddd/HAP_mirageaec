@@ -148,6 +148,10 @@ h2.h2, .h2 { font-size: 15px; font-weight: 700; margin: 0; }
   border-radius: 8px; font-size: 9px; font-weight: 800;
   display: inline-flex; align-items: center; justify-content: center;
 }
+/* a schedule is a spreadsheet, so it gets Excel's green rather than PDF red */
+.pdf-badge.kind-xls {
+  background: var(--green-soft); color: var(--green-dark); border-color: #CBD8A8;
+}
 
 /* ---------- pills, chips ---------- */
 .pill-ok { background: var(--green-soft); color: var(--green-dark); border-radius: 10px; padding: 4px 14px; font-size: 10px; font-weight: 800; }

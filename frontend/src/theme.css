@@ -327,17 +327,24 @@ select:disabled, input:disabled { background: var(--field); color: #A0A3AC; curs
   --gold: #C79547;
   --gold-deep: #A87A34;
   --ink: #0B1220;
-  --ink-soft: #6A7480;
+  /* darkened from #6A7480 once the blueprint went behind the page: on its
+     darker patches the old grey fell to 3.9:1, under the 4.5:1 AA floor */
+  --ink-soft: #5C6674;
   --line: #E7E7E3;
   min-height: 100%;
-  background: #FDFDFE;
+  /* The MEP blueprint fills the page behind the whole screen; the wash over
+     it is what keeps body text and the muted greys legible over the darker
+     line work. Lighten the wash and the drawing reads stronger, at the cost
+     of contrast — these two move together. */
+  background:
+    linear-gradient(rgba(253, 253, 254, .40), rgba(253, 253, 254, .40)),
+    url("/login-background.jpg") center / cover no-repeat,
+    #FDFDFE;
   display: flex;
   flex-direction: column;
   overflow: auto;
 }
 
-/* the faint dot field and gold wash of the reference, drawn rather than
-   shipped as a background image */
 .signin-body {
   flex: 1;
   display: grid;
@@ -345,12 +352,6 @@ select:disabled, input:disabled { background: var(--field); color: #A0A3AC; curs
   gap: 48px;
   align-items: center;
   padding: 40px 52px 28px;
-  background-image:
-    radial-gradient(circle at 1px 1px, rgba(199,149,71,.22) 1px, transparent 0),
-    radial-gradient(ellipse 60% 50% at 0% 100%, rgba(199,149,71,.07), transparent 70%);
-  background-size: 16px 16px, 100% 100%;
-  background-position: 10px 10px, 0 0;
-  background-repeat: repeat, no-repeat;
 }
 
 /* ---- left: the platform pitch ---- */
@@ -387,8 +388,9 @@ select:disabled, input:disabled { background: var(--field); color: #A0A3AC; curs
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px;
 }
 .module-tile {
-  background: #fff; border: 1px solid var(--line); border-radius: 13px;
-  padding: 17px 16px 16px;
+  background: rgba(255, 255, 255, .82); border: 1px solid var(--line);
+  border-radius: 13px; padding: 17px 16px 16px;
+  backdrop-filter: blur(2px);
 }
 .module-tile h2 {
   font-size: 13px; font-weight: 700; color: var(--ink); margin: 15px 0 5px;
@@ -465,6 +467,16 @@ select:disabled, input:disabled { background: var(--field); color: #A0A3AC; curs
   box-shadow: 0 0 0 3px rgba(199, 149, 71, .16);
 }
 .signin-field input[type=password] { letter-spacing: .12em; }
+/* Chrome paints autofilled fields its own pale blue, which fought the card.
+   An inset shadow is the only way to override that background; the explicit
+   text fill keeps the value readable once it does. */
+.signin-field input:-webkit-autofill,
+.signin-field input:-webkit-autofill:hover,
+.signin-field input:-webkit-autofill:focus {
+  box-shadow: 0 0 0 100px #fff inset;
+  -webkit-text-fill-color: var(--ink);
+  caret-color: var(--ink);
+}
 .signin-reveal {
   position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
   background: none; border: none; cursor: pointer; color: #9AA1AC;
@@ -528,7 +540,9 @@ select:disabled, input:disabled { background: var(--field); color: #A0A3AC; curs
   display: flex; align-items: center; justify-content: space-between;
   gap: 18px; flex-wrap: wrap;
   padding: 16px 52px; border-top: 1px solid var(--line);
-  color: var(--ink-soft); font-size: 12px; background: #fff;
+  color: var(--ink-soft); font-size: 12px;
+  background: rgba(255, 255, 255, .72);
+  backdrop-filter: blur(4px);
 }
 .signin-footer-mid { display: flex; align-items: center; gap: 18px; }
 /* the hairline between the two policy labels */
@@ -548,5 +562,4 @@ select:disabled, input:disabled { background: var(--field); color: #A0A3AC; curs
   .capability-strip li + li { border-left: none; padding-left: 0; }
   .signin-card { padding: 24px 20px 20px; }
   .signin-footer { justify-content: flex-start; }
-}
 }

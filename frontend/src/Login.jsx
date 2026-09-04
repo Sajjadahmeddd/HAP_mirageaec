@@ -145,6 +145,21 @@ export default function Login({ onSignedIn }) {
     document.getElementById(target)?.focus()
   }, [remembered])
 
+  // A password manager fills the fields straight into the DOM without React's
+  // onChange ever running, so state stayed empty and Sign in stayed disabled
+  // over two visibly filled boxes — no way in for anyone with saved
+  // credentials. Read back what the browser actually put there. The timings
+  // cover autofill that lands before, during and just after first paint.
+  useEffect(() => {
+    const adopt = () => {
+      const filled = (id) => document.getElementById(id)?.value || ''
+      setEmail((current) => current || filled('maec-email'))
+      setPassword((current) => current || filled('maec-password'))
+    }
+    const timers = [0, 120, 400, 900].map((ms) => setTimeout(adopt, ms))
+    return () => timers.forEach(clearTimeout)
+  }, [])
+
   const submit = async (event) => {
     event.preventDefault()
     if (!email.trim() || !password || busy) return

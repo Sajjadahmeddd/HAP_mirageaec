@@ -176,6 +176,34 @@ def test_verify_rejects_a_wrong_password(monkeypatch):
     assert auth.verify(auth.DEFAULT_EMAIL, auth.DEFAULT_PASSWORD) is True
 
 
+# ------------------------------------------------------------- the docs
+# FastAPI's docs map every endpoint and its request shape. They live outside
+# /api/, so they need naming explicitly — and a test, so a later refactor of
+# requires_auth cannot quietly reopen them.
+DOCS = ["/docs", "/redoc", "/openapi.json", "/docs/oauth2-redirect"]
+
+
+@pytest.mark.parametrize("path", DOCS)
+def test_the_api_docs_are_not_readable_by_a_stranger(locked, path):
+    assert locked.get(path).status_code == 401
+
+
+@pytest.mark.parametrize("path", DOCS)
+def test_the_api_docs_open_once_signed_in(locked, path):
+    """Gated, not removed: staff still get them on the running service."""
+    sign_in(locked)
+    assert locked.get(path).status_code == 200
+
+
+def test_the_docs_stay_shut_with_nothing_configured(unconfigured):
+    assert unconfigured.get("/openapi.json").status_code == 401
+
+
+def test_requires_auth_covers_the_docs():
+    for path in DOCS:
+        assert auth.requires_auth(path) is True
+
+
 def test_requires_auth_covers_the_api_but_not_the_shell():
     assert auth.requires_auth("/api/airsizer/config") is True
     assert auth.requires_auth("/api/hapext/convert") is True

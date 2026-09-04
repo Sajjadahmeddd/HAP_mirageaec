@@ -79,9 +79,13 @@ and those are readable by anyone with repository access. Override both before
 sharing a URL. The service prints which password is in force at startup, and
 `/api/health` always reports `"auth": "on"`.
 
-Everything under `/api/` is guarded except `/api/auth/*` and `/api/health`.
-The SPA shell itself is always served — it has to load in order to show a
-login screen at all.
+Everything under `/api/` is guarded except `/api/auth/*` and `/api/health`,
+so a route added for a new module is protected without touching the guard.
+`/docs`, `/redoc` and `/openapi.json` sit outside `/api/` and are named
+explicitly in `DOCS_PREFIXES`: they map every endpoint and its request
+shape, so they are gated rather than public — signed-in staff still get
+them on the running service. The SPA shell itself is always served — it
+has to load in order to show a login screen at all.
 
 The session is a **signed cookie**, not a server-side session store, so it
 survives a restart or a second instance with no shared state. Cookies are

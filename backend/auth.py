@@ -30,9 +30,15 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 SESSION_KEY = "maec_auth"
 SESSION_MAX_AGE = 12 * 60 * 60          # one working day
 
-# Paths reachable without signing in: the login exchange itself, the health
-# probe Render polls, and the API docs.
+# Paths reachable without signing in: the login exchange itself and the
+# health probe Render polls.
 PUBLIC_PREFIXES = ("/api/auth/", "/api/health")
+
+# FastAPI serves its own docs outside /api/, so the rule below would let them
+# through. They map every endpoint and its request shape — reconnaissance a
+# stranger should not get for free — so they are named here explicitly.
+# Signed-in staff still get them, which is when they are actually wanted.
+DOCS_PREFIXES = ("/docs", "/redoc", "/openapi.json")
 
 
 # Signing in is mandatory: there is no configuration that leaves the app open.
@@ -93,8 +99,14 @@ def is_signed_in(request: Request) -> bool:
 
 
 def requires_auth(path: str) -> bool:
-    """Only the API is guarded; the SPA shell itself must load to show a
-    login screen at all."""
+    """The API and the docs are guarded; the SPA shell itself must load to
+    show a login screen at all.
+
+    Anything new under /api/ is covered without touching this — which is the
+    point, with more modules to come.
+    """
+    if path.startswith(DOCS_PREFIXES):
+        return True
     if not path.startswith("/api/"):
         return False
     return not path.startswith(PUBLIC_PREFIXES)

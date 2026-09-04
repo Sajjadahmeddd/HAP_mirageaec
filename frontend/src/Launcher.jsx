@@ -5,14 +5,23 @@
 // only the right-hand panel changes. What does change is that the tiles are
 // now controls, and the one product that exists can be opened.
 //
-// READY lives in MaecOne.jsx and is the whole of the release gate: the
-// sign-in screen reads the same list, so both describe the same eight things.
+// Each product other than this one is its own Render service, so picking it
+// is a navigation, not a route change. MODULES in MaecOne.jsx holds the URLs
+// and is the release gate; the sign-in screen reads the same list, so both
+// screens always describe the same eight things.
 
-import MaecOne, { BADGES, ICONS, MODULES, READY } from './MaecOne.jsx'
+import MaecOne, { BADGES, ICONS, MODULES, READY, isReady } from './MaecOne.jsx'
 
 export default function Launcher({ name, email, onOpen, onSignOut }) {
-  const live = MODULES.filter((m) => READY.includes(m.key))
+  const live = MODULES.filter(isReady)
   const soon = MODULES.length - live.length
+
+  // The app we are opens in place; a separately hosted one is a full
+  // navigation to wherever it lives.
+  const pick = (module) => {
+    if (module.internal) onOpen(module.key)
+    else if (module.href) window.location.assign(module.href)
+  }
 
   const panel = (
     <div className="signin-card launch-card">
@@ -37,7 +46,11 @@ export default function Launcher({ name, email, onOpen, onSignOut }) {
           const Icon = ICONS[icon]
           return (
             <li key={key}>
-              <button type="button" className="launch-open" onClick={() => onOpen(key)}>
+              <button
+                type="button"
+                className="launch-open"
+                onClick={() => pick(MODULES.find((m) => m.key === key))}
+              >
                 <span className={`module-icon tone-${tone}`}><Icon width="22" height="22" /></span>
                 <span className="launch-open-text">
                   <strong>{title}</strong>
@@ -70,5 +83,5 @@ export default function Launcher({ name, email, onOpen, onSignOut }) {
     </div>
   )
 
-  return <MaecOne panel={panel} onPick={onOpen} ready={READY} />
+  return <MaecOne panel={panel} onPick={pick} ready={READY} />
 }

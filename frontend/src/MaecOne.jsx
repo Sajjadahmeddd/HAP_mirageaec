@@ -64,23 +64,30 @@ export const ICONS = {
   ),
 }
 
-// The MAEC One products. `key` is what the launcher reports back when one is
-// picked; only the ones it is told are ready can be clicked.
+// The MAEC One products.
+//
+// `internal` marks the one this app *is* — picking it opens HAPExt in place.
+// Every other product is its own Render service, so it gets an `href` and
+// picking it navigates there. Until that service exists the href is empty
+// and the tile reads "Coming soon".
+//
+// THIS LIST IS THE WHOLE RELEASE GATE. Deploy Timesheet, paste its URL into
+// its href, and its tile turns on. Nothing else changes.
 export const MODULES = [
-  { key: 'engineering', icon: 'tools', tone: 'blue', title: 'Engineering Tools', body: 'HAPExt, AirSizer Pro, HAPAudit & more' },
-  { key: 'projects', icon: 'project', tone: 'green', title: 'Project Management', body: 'Plan, track and deliver projects efficiently' },
-  { key: 'finance', icon: 'finance', tone: 'orange', title: 'Finance & Billing', body: 'Expenses, monitoring and invoice generation' },
-  { key: 'people', icon: 'people', tone: 'violet', title: 'People & HR', body: 'Attendance, leave, timesheet & more' },
-  { key: 'timesheet', icon: 'clock', tone: 'teal', title: 'Timesheet', body: 'Submit and manage your timesheets' },
-  { key: 'expenses', icon: 'card', tone: 'amber', title: 'Expense Control', body: 'Track, approve and monitor expenses' },
-  { key: 'attendance', icon: 'calendar', tone: 'rose', title: 'Attendance', body: 'Daily attendance and team overview' },
-  { key: 'kpa', icon: 'kpa', tone: 'blue', title: 'KPA', body: 'Manage KPAs and performance goals' },
+  { key: 'engineering', icon: 'tools', tone: 'blue', title: 'Engineering Tools', body: 'HAPExt, AirSizer Pro, HAPAudit & more', internal: true },
+  { key: 'projects', icon: 'project', tone: 'green', title: 'Project Management', body: 'Plan, track and deliver projects efficiently', href: '' },
+  { key: 'finance', icon: 'finance', tone: 'orange', title: 'Finance & Billing', body: 'Expenses, monitoring and invoice generation', href: '' },
+  { key: 'people', icon: 'people', tone: 'violet', title: 'People & HR', body: 'Attendance, leave, timesheet & more', href: '' },
+  { key: 'timesheet', icon: 'clock', tone: 'teal', title: 'Timesheet', body: 'Submit and manage your timesheets', href: '' },
+  { key: 'expenses', icon: 'card', tone: 'amber', title: 'Expense Control', body: 'Track, approve and monitor expenses', href: '' },
+  { key: 'attendance', icon: 'calendar', tone: 'rose', title: 'Attendance', body: 'Daily attendance and team overview', href: '' },
+  { key: 'kpa', icon: 'kpa', tone: 'blue', title: 'KPA', body: 'Manage KPAs and performance goals', href: '' },
 ]
 
-// The modules that can actually be opened. This is the whole release gate:
-// add a key as each product lands and its tile turns on. Both screens read it,
-// so the sign-in page and the launcher always describe the same eight things.
-export const READY = ['engineering']
+/** Openable: the app we are, or one that has somewhere to send you. */
+export const isReady = (m) => !!m.internal || !!m.href
+
+export const READY = MODULES.filter(isReady).map((m) => m.key)
 
 const CAPABILITIES = [
   ['shieldCheck', 'Secure Access'],
@@ -149,7 +156,7 @@ export default function MaecOne({ panel, onPick, ready = [] }) {
                       className={`module-tile${live ? ' live' : ''}`}
                       disabled={!live}
                       title={live ? `Open ${title}` : `${title} is not built yet`}
-                      onClick={() => onPick(key)}
+                      onClick={() => onPick(MODULES.find((m) => m.key === key))}
                     >
                       {face}
                     </button>

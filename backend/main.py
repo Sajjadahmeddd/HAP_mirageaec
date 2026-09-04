@@ -43,6 +43,45 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="MAEC", version=__version__, lifespan=lifespan)
 
+
+# What the browser is allowed to do with a page we served. This is not an
+# access rule — it gates nothing and no signed-in user can tell it is here.
+# It limits the damage if a page ever ends up carrying something it should
+# not, which is also why it blocks the "paste this CDN script in" advice
+# that circulates for hiding devtools.
+#
+# Every part of the app is same-origin, so the policy can be tight. The two
+# concessions are real needs, not guesses:
+#   style-src 'unsafe-inline'  React writes style="" attributes from JSX
+#   img-src   blob:            the logo preview in Project Details reads the
+#                              chosen file through URL.createObjectURL
+#
+# frame-ancestors is 'self', not 'none': MAEC One may come to embed its
+# modules, and 'none' would break that on the day it does. Other sites are
+# still refused, which is what stops our sign-in form being framed over
+# someone else's page.
+CSP = "; ".join([
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "form-action 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'self'",
+])
+
+SECURITY_HEADERS = {
+    "Content-Security-Policy": CSP,
+    "X-Content-Type-Options": "nosniff",       # no guessing a file's type
+    "X-Frame-Options": "SAMEORIGIN",           # for browsers predating CSP
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+}
+
+
 # ORDER MATTERS. Starlette runs the *last* middleware added as the outermost
 # one, so the guard is registered first and SessionMiddleware second — that
 # way the session cookie is decoded before the guard tries to read it.
@@ -71,6 +110,23 @@ app.add_middleware(
     same_site="lax",
     https_only=bool(os.environ.get("RENDER")),
 )
+
+
+# Registered last, so it is the outermost layer and sees every response —
+# including the guard's 401, which returns without calling through and so
+# never reaches anything registered beneath it.
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    for header, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(header, value)
+    # Only meaningful over TLS, and only true on Render — asserting it in
+    # local development would pin a developer's browser to https://localhost.
+    if os.environ.get("RENDER"):
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    return response
 
 if os.environ.get("MAEC_DEV"):
     from fastapi.middleware.cors import CORSMiddleware

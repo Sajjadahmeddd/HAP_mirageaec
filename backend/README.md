@@ -130,6 +130,45 @@ The wordmark in the title bar goes back to the launcher, so a module is never
 a dead end. Signing out and a lapsed session both return there too, so the
 next sign-in never drops you straight back inside a module.
 
+## Response headers
+
+`SECURITY_HEADERS` in `main.py` bounds what a browser will do with a page we
+served. It gates nobody — a signed-in user cannot tell it is there — and is
+registered **last**, so it wraps every response including the guard's 401,
+which returns without calling through.
+
+The policy is tight because everything is same-origin. Two concessions are
+real needs, not guesses:
+
+| Directive | Why |
+|---|---|
+| `style-src 'unsafe-inline'` | React writes `style=""` attributes out of JSX |
+| `img-src blob:` | the Project Details logo preview reads the chosen file via `URL.createObjectURL` |
+
+`frame-ancestors` is `'self'`, not `'none'`: MAEC One may come to embed its
+modules, and `'none'` would forbid that on the day it does. Other origins are
+still refused, which is what stops the sign-in form being framed over someone
+else's page.
+
+A CSP fails silently in the console rather than loudly, so changes to it need
+driving in a real browser, not just the test client.
+
+## Adding the other MAEC One modules
+
+`MODULES` in `frontend/src/MaecOne.jsx` is the release gate. Each product is
+its own Render service, so it carries an `href`; the one marked `internal` is
+this app and opens in place. Deploy a module, paste its URL into its `href`,
+and its tile turns on — on both the sign-in screen and the launcher, which
+read the same list.
+
+⚠️ **Sessions do not cross origins.** The cookie is scoped to this service's
+hostname, so a user sent to `maec-timesheet.onrender.com` will be asked to
+sign in again. Worse, `onrender.com` is on the Public Suffix List, so a cookie
+cannot be shared across `*.onrender.com` subdomains at all. Single sign-on
+across the eight needs either a custom domain (`hapext.maec.example` and
+friends, cookie on the parent) or a central auth service issuing tokens. Worth
+settling before the second module ships rather than after.
+
 ## Statelessness
 
 Render's disk is ephemeral, so nothing is kept between requests:

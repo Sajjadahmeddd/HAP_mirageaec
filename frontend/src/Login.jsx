@@ -9,7 +9,7 @@
 
 import { useEffect, useState } from 'react'
 import { auth } from './api'
-import MaecOne, { BADGES, ICONS, Svg } from './MaecOne.jsx'
+import MaecOne, { BADGES, ICONS, READY, Svg } from './MaecOne.jsx'
 
 const REMEMBER_KEY = 'maec.signin.email'
 
@@ -173,5 +173,7 @@ export default function Login({ onSignedIn }) {
     </form>
   )
 
-  return <MaecOne panel={card} />
+  // ready without onPick: the tiles say what exists but stay inert —
+  // nothing should look clickable before we know who you are
+  return <MaecOne panel={card} ready={READY} />
 }

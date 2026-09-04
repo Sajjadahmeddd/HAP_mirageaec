@@ -5,12 +5,10 @@
 // only the right-hand panel changes. What does change is that the tiles are
 // now controls, and the one product that exists can be opened.
 //
-// READY is the whole of the release gate. As each of the other seven is
-// built, add its key here and its tile turns on — nothing else to change.
+// READY lives in MaecOne.jsx and is the whole of the release gate: the
+// sign-in screen reads the same list, so both describe the same eight things.
 
-import MaecOne, { BADGES, ICONS, MODULES } from './MaecOne.jsx'
-
-const READY = ['engineering']
+import MaecOne, { BADGES, ICONS, MODULES, READY } from './MaecOne.jsx'
 
 export default function Launcher({ name, email, onOpen, onSignOut }) {
   const live = MODULES.filter((m) => READY.includes(m.key))

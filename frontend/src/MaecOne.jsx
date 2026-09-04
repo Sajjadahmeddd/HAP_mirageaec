@@ -77,6 +77,11 @@ export const MODULES = [
   { key: 'kpa', icon: 'kpa', tone: 'blue', title: 'KPA', body: 'Manage KPAs and performance goals' },
 ]
 
+// The modules that can actually be opened. This is the whole release gate:
+// add a key as each product lands and its tile turns on. Both screens read it,
+// so the sign-in page and the launcher always describe the same eight things.
+export const READY = ['engineering']
+
 const CAPABILITIES = [
   ['shieldCheck', 'Secure Access'],
   ['bolt', 'Smart Automation'],
@@ -119,12 +124,21 @@ export default function MaecOne({ panel, onPick, ready = [] }) {
           <ul className="module-grid">
             {MODULES.map(({ key, icon, tone, title, body }) => {
               const Icon = ICONS[icon]
-              const live = !!onPick && ready.includes(key)
+              const built = ready.includes(key)
+              const live = !!onPick && built
+              // One face for both screens — including the state line, which is
+              // why the two columns are the same height rather than merely
+              // close. Only the wording changes with what you can do here.
               const face = (
                 <>
                   <span className={`module-icon tone-${tone}`}><Icon width="27" height="27" /></span>
                   <h2>{title}</h2>
                   <p>{body}</p>
+                  <span className="module-state">
+                    {live
+                      ? <>Open <ICONS.arrow width="13" height="13" /></>
+                      : built ? 'Available' : 'Coming soon'}
+                  </span>
                 </>
               )
               return (
@@ -138,12 +152,9 @@ export default function MaecOne({ panel, onPick, ready = [] }) {
                       onClick={() => onPick(key)}
                     >
                       {face}
-                      <span className="module-state">
-                        {live ? <>Open <ICONS.arrow width="13" height="13" /></> : 'Coming soon'}
-                      </span>
                     </button>
                   ) : (
-                    <div className="module-tile">{face}</div>
+                    <div className={`module-tile${built ? ' built' : ''}`}>{face}</div>
                   )}
                 </li>
               )

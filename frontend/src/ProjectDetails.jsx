@@ -31,12 +31,6 @@ function toDisplayDate(iso) {
   return `${d}.${m}.${y}`
 }
 
-/** ...and back again, for a date read off a schedule we wrote. */
-function toIsoDate(display) {
-  const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(String(display || '').trim())
-  return m ? `${m[3]}-${m[2]}-${m[1]}` : ''
-}
-
 /** Where to point an <img> at a logo, whether it was picked here as a File
  *  or imported out of a schedule as a data URL. */
 export function logoSrc(logo) {
@@ -90,8 +84,11 @@ export default function ProjectDetails({ initial, initialLogo, onSave, onClose, 
     const { details, logo: imported } = found
     setValues((prev) => {
       const next = { ...prev }
-      PROJECT_FIELDS.forEach(([key]) => { if (details[key]) next[key] = details[key] })
-      if (details.date) next.dateIso = toIsoDate(details.date) || prev.dateIso
+      // Date is deliberately not imported: it stamps when this schedule is
+      // issued, not when the one it was read from was. Today's stands.
+      PROJECT_FIELDS
+        .filter(([key]) => key !== 'date')
+        .forEach(([key]) => { if (details[key]) next[key] = details[key] })
       return next
     })
     if (imported) setLogo(imported)

@@ -49,8 +49,15 @@ button { font-family: inherit; }
   padding: 0 14px;
   flex: none;
 }
-/* the wordmark carries the brand, so there is no text beside it */
+/* the wordmark carries the brand, so there is no text beside it — and it is
+   the way back out of a module to the MAEC One launcher */
 .titlebar-logo { height: 21px; display: block; }
+.titlebar-home {
+  background: none; border: none; padding: 2px 4px; margin-left: -4px;
+  border-radius: 7px; cursor: pointer; line-height: 0;
+}
+.titlebar-home:hover { background: rgba(11, 18, 32, .06); }
+.titlebar-home:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
 .version { color: var(--muted); font-size: 11px; font-weight: 700; }
 
 .tabbar {
@@ -387,11 +394,38 @@ select:disabled, input:disabled { background: var(--field); color: #A0A3AC; curs
   list-style: none; margin: 0 0 22px; padding: 0;
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px;
 }
+/* The tile keeps one face whether it is a plain div on the sign-in screen or
+   a button on the launcher, so the page does not shift between the two. */
+.module-grid > li { display: flex; }
 .module-tile {
+  flex: 1;
   background: rgba(255, 255, 255, .82); border: 1px solid var(--line);
   border-radius: 13px; padding: 17px 16px 16px;
   backdrop-filter: blur(2px);
+  font: inherit; color: inherit; text-align: left;
+  display: flex; flex-direction: column;
 }
+button.module-tile { cursor: not-allowed; }
+button.module-tile.live { cursor: pointer; background: rgba(255, 255, 255, .94); }
+button.module-tile.live:hover {
+  border-color: var(--gold);
+  box-shadow: 0 10px 26px -16px rgba(11, 18, 32, .45);
+  transform: translateY(-2px);
+}
+button.module-tile.live:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+button.module-tile:not(.live) { opacity: .62; }
+@media (prefers-reduced-motion: no-preference) {
+  button.module-tile.live { transition: border-color .15s, box-shadow .15s, transform .15s; }
+}
+
+/* the strip along the bottom of a tile saying whether it can be opened */
+.module-state {
+  margin-top: auto; padding-top: 11px;
+  display: flex; align-items: center; gap: 5px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--ink-soft);
+}
+button.module-tile.live .module-state { color: var(--gold-deep); }
 .module-tile h2 {
   font-size: 13px; font-weight: 700; color: var(--ink); margin: 15px 0 5px;
 }
@@ -534,6 +568,42 @@ select:disabled, input:disabled { background: var(--field); color: #A0A3AC; curs
   display: flex; flex-direction: column; line-height: 1.35; font-size: 10px;
 }
 .signin-badges strong { font-size: 11px; font-weight: 700; color: var(--ink); }
+
+/* ---- launcher panel ---- */
+.launch-card { text-align: center; }
+.launch-status {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin: 0 auto 12px; padding: 5px 12px;
+  background: var(--green-soft); color: var(--green-dark);
+  border-radius: 999px; font-size: 11px; font-weight: 700;
+}
+.launch-name {
+  margin: 4px 0 0; font-size: 17px; font-weight: 700; color: var(--gold-deep);
+}
+.launch-lede {
+  margin: 16px 0 18px; font-size: 13px; line-height: 1.6; color: var(--ink-soft);
+}
+
+.launch-list { list-style: none; margin: 0; padding: 0; text-align: left; }
+.launch-open {
+  width: 100%; display: flex; align-items: center; gap: 12px;
+  padding: 13px 14px; border: 1px solid var(--line); border-radius: 12px;
+  background: #fff; cursor: pointer; font: inherit; color: var(--ink);
+}
+.launch-open:hover { border-color: var(--gold); background: #FFFDF9; }
+.launch-open:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.launch-open .module-icon { flex: none; }
+.launch-open-text { flex: 1; display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--ink-soft); }
+.launch-open-text strong { font-size: 13px; font-weight: 700; color: var(--ink); }
+.launch-open > svg:last-child { flex: none; color: var(--gold-deep); }
+
+.launch-soon { margin: 14px 0 0; font-size: 11px; line-height: 1.55; color: var(--ink-soft); }
+.launch-signout {
+  margin-top: 16px; background: none; border: none; cursor: pointer;
+  color: var(--ink-soft); font: inherit; font-size: 12.5px; font-weight: 600;
+  text-decoration: underline;
+}
+.launch-signout:hover { color: var(--ink); }
 
 /* ---- footer ---- */
 .signin-footer {

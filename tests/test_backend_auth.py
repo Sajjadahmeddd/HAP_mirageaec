@@ -176,6 +176,28 @@ def test_verify_rejects_a_wrong_password(monkeypatch):
     assert auth.verify(auth.DEFAULT_EMAIL, auth.DEFAULT_PASSWORD) is True
 
 
+# ---------------------------------------------------------- who we greet
+def test_the_launcher_is_told_who_signed_in(locked):
+    """The launcher greets by name, so /me has to carry one."""
+    assert locked.get("/api/auth/me").json()["name"] == ""      # nobody yet
+    assert sign_in(locked).json()["name"] == auth.DEFAULT_NAME
+    body = locked.get("/api/auth/me").json()
+    assert body["name"] == auth.DEFAULT_NAME
+    assert body["email"] == EMAIL
+
+
+def test_the_display_name_can_be_overridden(monkeypatch):
+    monkeypatch.setenv("MAEC_PASSWORD", PASSWORD)
+    monkeypatch.setenv("MAEC_DISPLAY_NAME", "Mirage AEC India")
+    client = TestClient(app)
+    assert sign_in(client).json()["name"] == "Mirage AEC India"
+
+
+def test_the_display_name_falls_back_to_the_built_in_one(monkeypatch):
+    monkeypatch.delenv("MAEC_DISPLAY_NAME", raising=False)
+    assert auth.display_name() == auth.DEFAULT_NAME
+
+
 # ------------------------------------------------------------- the docs
 # FastAPI's docs map every endpoint and its request shape. They live outside
 # /api/, so they need naming explicitly — and a test, so a later refactor of

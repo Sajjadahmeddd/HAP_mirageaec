@@ -73,6 +73,7 @@ configuration that leaves the app open.
 | `MAEC_EMAIL` | The sign-in address. Defaults to `mirageaec@mirage.com`. |
 | `MAEC_PASSWORD` | The password. Defaults to the built-in one in `auth.py`. |
 | `MAEC_SECRET_KEY` | Signs the session cookie. Changing it signs everyone out. |
+| `MAEC_DISPLAY_NAME` | Who the launcher greets. Defaults to `Mirage AEC`. |
 
 ⚠️ Unset does **not** mean open — it means the built-in credentials apply,
 and those are readable by anyone with repository access. Override both before
@@ -114,6 +115,20 @@ $env:MAEC_PASSWORD = "something"
 a username lookup against bcrypt hashes held in a `MAEC_USERS` env var, and
 `Login.jsx` gains a username field. The guard, the cookie, the routes and the
 rest of the frontend are untouched. Still no database.
+
+## The launcher
+
+Signing in lands on the MAEC One launcher, not inside a module. It is the
+same frame as the sign-in screen — `MaecOne.jsx`, shared by both — with the
+right-hand panel swapped and the eight tiles turned into controls.
+
+`READY` in `Launcher.jsx` is the whole release gate: it lists the module keys
+that can be opened, and every other tile shows "Coming soon". As each of the
+other seven products is built, add its key there and its tile turns on.
+
+The wordmark in the title bar goes back to the launcher, so a module is never
+a dead end. Signing out and a lapsed session both return there too, so the
+next sign-in never drops you straight back inside a module.
 
 ## Statelessness
 

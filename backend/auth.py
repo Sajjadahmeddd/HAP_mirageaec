@@ -48,6 +48,11 @@ DOCS_PREFIXES = ("/docs", "/redoc", "/openapi.json")
 DEFAULT_EMAIL = "mirageaec@mirage.com"
 DEFAULT_PASSWORD = "hapext"
 
+# Who the launcher greets. One shared account for now, so this is simply
+# configuration; when per-user logins land it becomes the signed-in user's
+# own name and nothing on the frontend has to change.
+DEFAULT_NAME = "Mirage AEC"
+
 
 def email() -> str:
     return (os.environ.get("MAEC_EMAIL", "").strip() or DEFAULT_EMAIL).lower()
@@ -55,6 +60,10 @@ def email() -> str:
 
 def password() -> str:
     return os.environ.get("MAEC_PASSWORD", "").strip() or DEFAULT_PASSWORD
+
+
+def display_name() -> str:
+    return os.environ.get("MAEC_DISPLAY_NAME", "").strip() or DEFAULT_NAME
 
 
 def is_enabled() -> bool:
@@ -121,6 +130,7 @@ async def me(request: Request):
         "enabled": is_enabled(),
         "authenticated": signed_in,
         "email": request.session.get("email", "") if signed_in else "",
+        "name": display_name() if signed_in else "",
         "mode": "shared-account",
     }
 
@@ -136,7 +146,12 @@ async def login(request: Request, payload: dict):
 
     request.session[SESSION_KEY] = True
     request.session["email"] = supplied_email.strip().lower()
-    return {"authenticated": True, "enabled": True, "email": email()}
+    return {
+        "authenticated": True,
+        "enabled": True,
+        "email": email(),
+        "name": display_name(),
+    }
 
 
 @router.post("/logout")

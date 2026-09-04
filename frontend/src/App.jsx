@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { SESSION_EXPIRED, airsizer as airApi, auth as authApi } from './api'
+import Launcher from './Launcher.jsx'
 import Login from './Login.jsx'
 import { AIRSIZER, HAPEXT, save as saveRecent } from './recents'
 
@@ -30,8 +31,13 @@ export default function App() {
   const [tab, setTab] = useState('HAPExt')
   const [page, setPage] = useState('hap-home')
 
-  // null while we ask the server; then {enabled, authenticated}
+  // null while we ask the server; then {enabled, authenticated, name, email}
   const [session, setSession] = useState(null)
+
+  // Signed in, but still on the MAEC One launcher rather than inside a
+  // module. Reaching a module is always a deliberate choice, so this starts
+  // false on every sign-in and on every reload of an existing session.
+  const [opened, setOpened] = useState(false)
 
   // ---- HAPExt session
   const [pdf, setPdf] = useState(null)          // {file, name, pages, size}
@@ -72,13 +78,17 @@ export default function App() {
 
   // A lapsed session anywhere in the app drops straight back to the login
   useEffect(() => {
-    const expired = () => setSession((s) => ({ ...(s || {}), enabled: true, authenticated: false }))
+    const expired = () => {
+      setOpened(false)   // sign in again and you land on the launcher, not mid-module
+      setSession((s) => ({ ...(s || {}), enabled: true, authenticated: false }))
+    }
     window.addEventListener(SESSION_EXPIRED, expired)
     return () => window.removeEventListener(SESSION_EXPIRED, expired)
   }, [])
 
   const signOut = async () => {
     try { await authApi.logout() } catch { /* the cookie goes either way */ }
+    setOpened(false)
     setSession({ enabled: true, authenticated: false })
     setConversion(null); setDetails(null); setLogo(null); setChangeResult(null)
     setSpaces([]); setSizingInputs({}); setResults({})
@@ -188,13 +198,30 @@ export default function App() {
     </div>
   }
   if (session.enabled && !session.authenticated) {
-    return <Login onSignedIn={() => setSession({ enabled: true, authenticated: true })} />
+    return <Login onSignedIn={(who) => setSession({ ...who, authenticated: true })} />
+  }
+
+  if (!opened) {
+    return (
+      <Launcher
+        name={session.name}
+        email={session.email}
+        onOpen={() => { setTab('HAPExt'); setPage('hap-home'); setOpened(true) }}
+        onSignOut={signOut}
+      />
+    )
   }
 
   return (
     <div className="shell">
       <div className="titlebar">
-        <img className="titlebar-logo" src="/maec-logo.png" alt="MAEC" />
+        <button
+          className="titlebar-home"
+          title="Back to MAEC One"
+          onClick={() => setOpened(false)}
+        >
+          <img className="titlebar-logo" src="/maec-logo.png" alt="MAEC" />
+        </button>
         <span className="version">v{VERSION}</span>
         {session.enabled && (
           <>

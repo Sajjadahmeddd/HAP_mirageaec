@@ -645,3 +645,15 @@ div.module-tile:not(.built) { opacity: .72; }
   .signin-card { padding: 24px 20px 20px; }
   .signin-footer { justify-content: flex-start; }
 }
+
+/* "Import from HAP Excel" — sits with the dialog title rather than the
+   fields, because it fills the whole form rather than any one of them. */
+.btn-import {
+  position: absolute; top: 18px; right: 20px;
+  background: var(--green-soft); color: var(--green-dark);
+  border: 1px solid #CBD8A8; border-radius: 9px;
+  padding: 6px 12px; font: inherit; font-size: 11.5px; font-weight: 700;
+  cursor: pointer;
+}
+.btn-import:hover { background: #E3EBCD; }
+.modal { position: relative; }

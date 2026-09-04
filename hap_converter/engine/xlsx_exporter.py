@@ -115,29 +115,33 @@ def _place_logo(ws, logo_path: str) -> None:
         cell.alignment = _center
 
 
-def write_fcu_xlsx(
-    details: dict[str, str],
-    column_header: list[str],
-    data_rows: list[list[str]],
-    target: str | Path,
-) -> Path:
-    target = Path(target)
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "FCU SCHEDULE"
+# The header block spans two zones: a title on the left, the client's logo on
+# the right, then four label/value pairs either side. It needs at least eight
+# columns for that; a narrower sheet simply lets the block overhang, which
+# reads better than cramming the two zones together.
+_MIN_HEADER_COLS = 8
 
-    # ---- rows 1-5: bordered header block ---------------------------------
+
+def write_project_header(
+    ws, details: dict[str, str], num_cols: int, title_text: str
+) -> None:
+    """Rows 1-5: the project block that heads a downloaded schedule.
+
+    Shared by the FCU schedule and the AirSizer sizing sheet so the two are
+    laid out identically and a change lands in both at once.
+    """
+    span = max(num_cols, _MIN_HEADER_COLS)
+
     for row in range(1, 6):
-        for col in range(1, _NUM_COLS + 1):
+        for col in range(1, span + 1):
             ws.cell(row=row, column=col).border = _border
 
-    ws.merge_cells("A1:F1")
-    title = ws["A1"]
-    title.value = "FCU SCHEDULE"
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=6)
+    title = ws.cell(row=1, column=1, value=title_text)
     title.font = Font(bold=True, size=16)
     title.alignment = _center
 
-    ws.merge_cells("G1:N1")
+    ws.merge_cells(start_row=1, start_column=7, end_row=1, end_column=span)
     ws.row_dimensions[1].height = _TITLE_ROW_PT
     _place_logo(ws, details.get(LOGO_KEY, ""))
 
@@ -149,15 +153,27 @@ def write_fcu_xlsx(
         left_label.font = label_font
         left_label.alignment = _left
         ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=6)
-        left_value = ws.cell(row=row, column=2, value=details[l_key].strip())
-        left_value.alignment = _left
+        ws.cell(row=row, column=2, value=details.get(l_key, "").strip()).alignment = _left
 
         right_label = ws.cell(row=row, column=7, value=r_label)
         right_label.font = label_font
         right_label.alignment = _left
-        ws.merge_cells(start_row=row, start_column=8, end_row=row, end_column=_NUM_COLS)
-        right_value = ws.cell(row=row, column=8, value=details[r_key].strip())
-        right_value.alignment = _left
+        ws.merge_cells(start_row=row, start_column=8, end_row=row, end_column=span)
+        ws.cell(row=row, column=8, value=details.get(r_key, "").strip()).alignment = _left
+
+
+def write_fcu_xlsx(
+    details: dict[str, str],
+    column_header: list[str],
+    data_rows: list[list[str]],
+    target: str | Path,
+) -> Path:
+    target = Path(target)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "FCU SCHEDULE"
+
+    write_project_header(ws, details, _NUM_COLS, "FCU SCHEDULE")
 
     # ---- row 6: column headers -------------------------------------------
     header_fill = PatternFill("solid", fgColor=NAVY)

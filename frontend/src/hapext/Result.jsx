@@ -4,7 +4,7 @@
 import { useState } from 'react'
 import { airsizer, hapext } from '../api'
 import { PreviewTable, SummaryStrip } from '../components.jsx'
-import ProjectDetails from './ProjectDetails.jsx'
+import ProjectDetails from '../ProjectDetails.jsx'
 
 export default function Result({ ctx }) {
   const [showDetails, setShowDetails] = useState(false)

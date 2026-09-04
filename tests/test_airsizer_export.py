@@ -107,6 +107,44 @@ def test_export_writes_only_the_visible_columns(sized, air_config, tmp_path):
     assert sheet.cell(row=4, column=4).value is None      # nothing beyond the three
 
 
+def test_the_project_block_heads_the_sheet_when_details_are_given(sized, air_config, tmp_path):
+    """The same nine inputs the HAPExt schedule carries, laid out the same way,
+    so the two documents read as one set."""
+    from PIL import Image
+
+    logo = tmp_path / "client.png"
+    Image.new("RGBA", (400, 140), (10, 80, 50, 255)).save(logo)
+    details = {
+        "project": "Avarra by Palace", "project_no": "MLD", "stage": "100 % DD",
+        "discipline": "MEP", "author": "SA", "checked": "FA", "revision": "2",
+        "date": "20.04.2026", "logo_path": str(logo),
+    }
+    spaces, inputs, results = sized
+    columns = export.visible_columns(air_config, None)
+    path = export.write_xlsx(spaces, inputs, results, air_config, columns,
+                             tmp_path, "sized", "Tower", details)
+
+    sheet = openpyxl.load_workbook(path).active
+    assert sheet["A1"].value == "AIR DIFFUSER SIZING"
+    assert (sheet["A2"].value, sheet["B2"].value) == ("Project:", "Avarra by Palace")
+    assert (sheet["G5"].value, sheet["H5"].value) == ("Date:", "20.04.2026")
+    assert len(sheet._images) == 1                       # the client's logo
+    assert sheet.cell(row=6, column=1).value == "Zone Name / Space Name"
+    assert sheet.cell(row=7, column=1).value == "#01-9F-Corridor1"
+
+
+def test_without_details_the_sheet_keeps_its_plain_heading(sized, air_config, tmp_path):
+    spaces, inputs, results = sized
+    columns = export.visible_columns(air_config, None)
+    path = export.write_xlsx(spaces, inputs, results, air_config, columns,
+                             tmp_path, "plain", "Tower")
+    sheet = openpyxl.load_workbook(path).active
+    assert sheet["A1"].value == "AIR DIFFUSER SIZING"
+    assert sheet["A2"].value == "Tower"                  # the old subtitle
+    assert sheet.cell(row=4, column=1).value == "Zone Name / Space Name"
+    assert sheet._images == []
+
+
 def test_export_auto_versions_instead_of_overwriting(sized, air_config, tmp_path):
     spaces, inputs, results = sized
     columns = export.visible_columns(air_config, None)

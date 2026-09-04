@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import base64
 import tempfile
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from starlette.background import BackgroundTask
 from hap_converter.airsizer.engine import export, pipeline
 from hap_converter.airsizer.engine.models import SizingInput, Space
 
+from hap_converter.engine.project_header import read_project_header
 from ..deps import CONFIG_DIR, airsizer_config, save_upload, workspace
 
 router = APIRouter(prefix="/api/airsizer", tags=["airsizer"])
@@ -127,6 +129,34 @@ async def diagram(key: str):
     return FileResponse(path, media_type="image/png")
 
 
+
+# The logo travels as a data URL because the browser holds it between the
+# upload and the download; nothing about a sizing run is stored server-side.
+_LOGO_MEDIA = "image/png"
+
+
+def _logo_data_url(blob: bytes | None) -> str:
+    if not blob:
+        return ""
+    return f"data:{_LOGO_MEDIA};base64," + base64.b64encode(blob).decode("ascii")
+
+
+def _details_with_logo(details, logo, scratch: Path) -> dict[str, str]:
+    """Turn the posted details into what the exporter wants: plain strings
+    plus a `logo_path` on disk. A logo that will not decode is dropped rather
+    than failing the export — the schedule still has to come out."""
+    if not isinstance(details, dict) or not details:
+        return {}
+    out = {str(k): str(v) for k, v in details.items() if k != "logo_path"}
+    if isinstance(logo, str) and "," in logo and logo.startswith("data:"):
+        try:
+            written = scratch / "client-logo.png"
+            written.write_bytes(base64.b64decode(logo.split(",", 1)[1]))
+            out["logo_path"] = str(written)
+        except Exception:
+            pass
+    return out
+
 @router.post("/load")
 async def load(schedule: UploadFile = File(...)):
     """Read a HAPExt schedule into the subspace list the wizard renders."""
@@ -137,11 +167,17 @@ async def load(schedule: UploadFile = File(...)):
             spaces = pipeline.load_spaces(path, config)
         except pipeline.SourceError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        # A HAPExt schedule already carries the nine project inputs. Read them
+        # here, while the upload still exists, so the browser can offer them
+        # later without a second upload — nothing is kept server-side.
+        details, logo = read_project_header(path)
 
     return {
         "source": path.name,
         "base_name": Path(schedule.filename or "schedule").stem,
         "spaces": [_space_json(s) for s in spaces],
+        "details": details,
+        "logo": _logo_data_url(logo),
     }
 
 
@@ -226,9 +262,11 @@ async def export_route(payload: str = Form(...)):
 
     scratch = Path(tempfile.mkdtemp(prefix="maec_air_"))
     try:
+        details = _details_with_logo(data.get("details"), data.get("logo"), scratch)
         target = export.write_xlsx(
             spaces, inputs, results, config, columns,
             scratch, f"{base_name} - sized", str(data.get("project_name") or ""),
+            details,
         )
     except Exception:
         shutil.rmtree(scratch, ignore_errors=True)

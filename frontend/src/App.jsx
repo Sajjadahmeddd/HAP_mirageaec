@@ -56,6 +56,11 @@ export default function App() {
   const [airSource, setAirSource] = useState('')
   const [airBaseName, setAirBaseName] = useState('')
   const [visibleColumns, setVisibleColumns] = useState(null)
+  // the nine project inputs for the sizing sheet, and what the loaded
+  // schedule already carried — the source the dialog's import button reads
+  const [airDetails, setAirDetails] = useState(null)
+  const [airLogo, setAirLogo] = useState(null)
+  const [airImported, setAirImported] = useState(null)
 
   // bumped whenever something is written to history, so the panels re-read
   const [recentsKey, setRecentsKey] = useState(0)
@@ -113,6 +118,16 @@ export default function App() {
     setAirBaseName(payload.base_name)
     setSizingInputs({})
     setResults({})
+    // What this schedule already carries, kept so the details dialog can
+    // offer it. Held, not applied: the engineer decides whether to import.
+    const found = payload.details && Object.keys(payload.details).length
+      ? { details: payload.details, logo: payload.logo
+            ? { name: 'Client logo (from schedule)', dataUrl: payload.logo }
+            : null }
+      : null
+    setAirImported(found)
+    setAirDetails(null)
+    setAirLogo(null)
     setTab('AirSizer Pro')
     setPage('air-wizard')
   }, [])
@@ -174,6 +189,7 @@ export default function App() {
     // AirSizer
     airConfig, airError, spaces, sizingInputs, results,
     airSource, airBaseName, visibleColumns, setVisibleColumns,
+    airDetails, setAirDetails, airLogo, setAirLogo, airImported,
     recordSizing, loadSpaces,
     // history
     recentsKey, rememberConversion, openConversion, rememberSizing, openSizing,

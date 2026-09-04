@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { airsizer } from '../api'
 import { Modal, PreviewTable, StepChips, SummaryStrip } from '../components.jsx'
+import ProjectDetails, { logoDataUrl } from '../ProjectDetails.jsx'
 import SizingPanel from './SizingPanel.jsx'
 import { STEPS, rowTint } from './Wizard.jsx'
 
@@ -82,6 +83,8 @@ export default function Review({ ctx }) {
   const [busy, setBusy] = useState(false)
   const [downloaded, setDownloaded] = useState(false)
   const [confirmUnsized, setConfirmUnsized] = useState(false)
+  const [showDetails, setShowDetails] = useState(false)
+  const [draft, setDraft] = useState(null)      // keeps the form between opens
   const [error, setError] = useState('')
   const [openRow, setOpenRow] = useState(null)
 
@@ -110,7 +113,7 @@ export default function Review({ ctx }) {
   const failed = results.filter((r) => !r.ok).length
   const interpolated = results.filter((r) => r.ok && r.interpolated).length
 
-  const exportFile = async () => {
+  const exportFile = async (details = ctx.airDetails, logo = ctx.airLogo) => {
     setBusy(true)
     setError('')
     try {
@@ -120,6 +123,8 @@ export default function Review({ ctx }) {
         visible_columns: visible,
         base_name: ctx.airBaseName,
         project_name: ctx.airSource,
+        details,
+        logo: await logoDataUrl(logo),
       })
       ctx.rememberSizing()          // keep it in this browser's history
       setDownloaded(true)
@@ -128,6 +133,14 @@ export default function Review({ ctx }) {
     } finally {
       setBusy(false)
     }
+  }
+
+  // The sheet is headed by the same nine inputs the HAPExt schedule carries,
+  // so they are asked for before the workbook is written, not after.
+  const requestExport = () => {
+    if (unsized > 0) { setConfirmUnsized(true); return }
+    if (!ctx.airDetails || !ctx.airLogo) { setShowDetails(true); return }
+    exportFile()
   }
 
   const notes = [`${rows.length} rows • ${columns.length} columns • ${sized} sized`]
@@ -201,18 +214,39 @@ export default function Review({ ctx }) {
             Project Summary
           </button>
         ) : (
-          <button
-            className="btn btn-primary"
-            disabled={sized === 0 || busy}
-            onClick={() => (unsized > 0 ? setConfirmUnsized(true) : exportFile())}
-          >
-            {busy ? 'Generating…' : downloaded ? 'Download again' : 'Generate Excel'}
-          </button>
+          <>
+            <button className="btn btn-secondary" onClick={() => setShowDetails(true)}>
+              Project Details{ctx.airDetails ? ' ✓' : ''}
+            </button>
+            <button
+              className="btn btn-primary"
+              disabled={sized === 0 || busy}
+              onClick={requestExport}
+            >
+              {busy ? 'Generating…' : downloaded ? 'Download again' : 'Generate Excel'}
+            </button>
+          </>
         )}
       </div>
 
       {openRow !== null && (
         <SizingPanel ctx={ctx} startRow={openRow} onClose={() => setOpenRow(null)} />
+      )}
+
+      {showDetails && (
+        <ProjectDetails
+          initial={draft}
+          initialLogo={ctx.airLogo}
+          onImport={() => ctx.airImported}
+          onClose={() => setShowDetails(false)}
+          onSave={(details, logo, formState) => {
+            ctx.setAirDetails(details)
+            ctx.setAirLogo(logo)
+            setDraft(formState)
+            setShowDetails(false)
+            if (stage === 4) exportFile(details, logo)
+          }}
+        />
       )}
 
       {confirmUnsized && (
@@ -225,7 +259,11 @@ export default function Review({ ctx }) {
             <button className="btn btn-secondary" onClick={() => setConfirmUnsized(false)}>Cancel</button>
             <button
               className="btn btn-primary"
-              onClick={() => { setConfirmUnsized(false); exportFile() }}
+              onClick={() => {
+                setConfirmUnsized(false)
+                if (!ctx.airDetails || !ctx.airLogo) setShowDetails(true)
+                else exportFile()
+              }}
             >
               Generate anyway
             </button>

@@ -59,7 +59,35 @@ npm --prefix frontend run build
 | POST | `/api/airsizer/size` | `airsizer.pipeline.size_space` |
 | POST | `/api/airsizer/export` | `airsizer.export.write_xlsx` |
 
+| POST | `/api/rebadge/validate` | `rebadger.pipeline.check` per sheet |
+| POST | `/api/rebadge/preview` | `rebadger.pipeline.preview` — a PNG of the real edit |
+| POST | `/api/rebadge/apply` | `rebadger.pipeline.rebadge_batch` + audit |
+
 Interactive docs at `/docs`.
+
+## PDF Rebadging
+
+Retitles CAD drawing sheets: PROJECT STAGE and SHEET STATUS are replaced in
+place, a row is appended to the revision history, and the bottom-right
+REVISION cell is overwritten. The drawing itself is never edited.
+
+Two rules shape the engine:
+
+- **Redaction, not cover-up.** Old values leave the content stream via
+  redaction annotations, and removal is verified by re-extracting the region.
+  A white box over old text would leave it selectable and searchable, which on
+  a revision-controlled drawing is worse than not editing at all.
+- **Label-anchored geometry.** Cells are found from the printed labels and the
+  ruled lines, never fixed coordinates, so one implementation handles both
+  frames the exports use: a portrait media box displayed rotated 90°, and a
+  native landscape page. They print identically and share no raw coordinates.
+
+⚠️ Rewriting a content stream is the one thing that could disturb the drawing,
+so `verify.py` compares every span's position before and after and reports
+anything that moved outside the edited cells. On one of the five samples
+MuPDF's rewriter shifts a single annotation by 4.8 pt; that sheet is emitted
+with a named warning rather than silently. See the module summary for the
+open question about whether that should fail the sheet instead.
 
 ## Sign-in
 

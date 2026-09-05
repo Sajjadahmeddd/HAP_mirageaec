@@ -150,3 +150,59 @@ export const airsizer = {
       .then((r) => download(r, `${payload.base_name} - sized.xlsx`))
   },
 }
+
+// A response that is both a file and a report: the batch summary rides in a
+// header so the Export screen can show per-sheet notes without a second call.
+async function downloadWithSummary(response, fallbackName, header) {
+  checkAuth(response)
+  if (!response.ok) {
+    let detail = `Rebadging failed (${response.status})`
+    try {
+      const body = await response.json()
+      detail = body.detail || detail
+    } catch { /* the body was the file, not an error */ }
+    throw new Error(detail)
+  }
+  const disposition = response.headers.get('content-disposition') || ''
+  const match = /filename\*?=(?:utf-8'')?"?([^";]+)"?/i.exec(disposition)
+  const name = match ? decodeURIComponent(match[1]) : fallbackName
+  const blob = await response.blob()
+  let summary = null
+  try { summary = JSON.parse(response.headers.get(header) || 'null') } catch { /* absent */ }
+  return { name, blob, summary, size: blob.size }
+}
+
+export const rebadge = {
+  /** Per-file report: labels found, current values, whether a row is free. */
+  validate(files) {
+    const form = new FormData()
+    files.forEach((file) => form.append('files', file))
+    return fetch('/api/rebadge/validate', { method: 'POST', body: form }).then(asJson)
+  },
+
+  /** A PNG of the title block after the real edit, plus any warnings. */
+  async preview(file, inputs) {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('payload', JSON.stringify(inputs))
+    const response = await fetch('/api/rebadge/preview', { method: 'POST', body: form })
+    checkAuth(response)
+    if (!response.ok) {
+      let detail = `Preview failed (${response.status})`
+      try { detail = (await response.json()).detail || detail } catch { /* not JSON */ }
+      throw new Error(detail)
+    }
+    let warnings = []
+    try { warnings = JSON.parse(response.headers.get('X-Rebadge-Warnings') || '[]') } catch { /* absent */ }
+    return { url: URL.createObjectURL(await response.blob()), warnings }
+  },
+
+  /** The rebadged set. Held, not saved: the Export screen offers the download. */
+  apply(files, inputs) {
+    const form = new FormData()
+    files.forEach((file) => form.append('files', file))
+    form.append('payload', JSON.stringify(inputs))
+    return fetch('/api/rebadge/apply', { method: 'POST', body: form })
+      .then((r) => downloadWithSummary(r, 'Rebadged_Drawings.zip', 'X-Rebadge-Summary'))
+  },
+}

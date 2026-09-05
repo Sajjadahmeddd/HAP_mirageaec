@@ -18,19 +18,28 @@ const MAX_ENTRIES = 10
 
 export const HAPEXT = 'hapext'
 export const AIRSIZER = 'airsizer'
+export const REBADGE = 'rebadge'
+
+// Every module that keeps history. This list is the only place that needs to
+// know: the store, the readers and the quota shedding all work off it, so a
+// fourth module is one line rather than three functions to remember.
+const MODULES = [HAPEXT, AIRSIZER, REBADGE]
+
+const empty = () => Object.fromEntries(MODULES.map((module) => [module, []]))
 
 /** Every read is guarded: private-browsing mode throws on access. */
 function readAll() {
   try {
     const raw = localStorage.getItem(KEY)
-    if (!raw) return { [HAPEXT]: [], [AIRSIZER]: [] }
+    if (!raw) return empty()
     const parsed = JSON.parse(raw)
-    return {
-      [HAPEXT]: Array.isArray(parsed[HAPEXT]) ? parsed[HAPEXT] : [],
-      [AIRSIZER]: Array.isArray(parsed[AIRSIZER]) ? parsed[AIRSIZER] : [],
-    }
+    const store = empty()
+    MODULES.forEach((module) => {
+      if (Array.isArray(parsed[module])) store[module] = parsed[module]
+    })
+    return store
   } catch {
-    return { [HAPEXT]: [], [AIRSIZER]: [] }   // missing, corrupt, or blocked
+    return empty()                            // missing, corrupt, or blocked
   }
 }
 
@@ -44,7 +53,7 @@ function writeAll(store) {
       localStorage.setItem(KEY, JSON.stringify(store))
       return true
     } catch (err) {
-      const longest = [HAPEXT, AIRSIZER]
+      const longest = [...MODULES]
         .sort((a, b) => store[b].length - store[a].length)[0]
       if (!store[longest].length) return false      // nothing left to shed
       store[longest] = store[longest].slice(0, -1)  // drop the oldest

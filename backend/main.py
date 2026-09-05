@@ -22,7 +22,7 @@ from hap_converter import __version__
 
 from . import auth
 from .deps import airsizer_config, hapext_config
-from .routers import airsizer, hapext
+from .routers import airsizer, hapext, rebadge
 
 FRONTEND_DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 
@@ -141,6 +141,7 @@ if os.environ.get("MAEC_DEV"):
 app.include_router(auth.router)
 app.include_router(hapext.router)
 app.include_router(airsizer.router)
+app.include_router(rebadge.router)
 
 
 @app.get("/api/health")

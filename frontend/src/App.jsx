@@ -20,12 +20,14 @@ import HapFailure from './hapext/Failure.jsx'
 import ChangeRequest from './hapext/ChangeRequest.jsx'
 import ChangeReview from './hapext/ChangeReview.jsx'
 
+import RebadgeHome from './rebadge/Home.jsx'
+import RebadgeWizard from './rebadge/Wizard.jsx'
 import AirHome from './airsizer/Home.jsx'
 import AirUpload from './airsizer/Upload.jsx'
 import AirWizard from './airsizer/Wizard.jsx'
 import AirReview from './airsizer/Review.jsx'
 
-const TABS = ['HAPExt', 'AirSizer Pro', 'HAPAudit']
+const TABS = ['HAPExt', 'AirSizer Pro', 'HAPAudit', 'PDF Rebadging']
 const VERSION = '1.2'
 
 export default function App() {
@@ -104,7 +106,8 @@ export default function App() {
   const goTab = (name) => {
     if (name === 'HAPAudit') return
     setTab(name)
-    setPage(name === 'HAPExt' ? 'hap-home' : 'air-home')
+    setPage({ 'HAPExt': 'hap-home', 'AirSizer Pro': 'air-home',
+              'PDF Rebadging': 'rebadge-home' }[name] || 'hap-home')
   }
 
   const recordSizing = useCallback((row, diffuser, values, result) => {
@@ -193,6 +196,7 @@ export default function App() {
     recordSizing, loadSpaces,
     // history
     recentsKey, rememberConversion, openConversion, rememberSizing, openSizing,
+    bumpRecents: () => setRecentsKey((n) => n + 1),
   }
 
   const pages = {
@@ -203,6 +207,8 @@ export default function App() {
     'hap-failure': HapFailure,
     'hap-change': ChangeRequest,
     'hap-change-review': ChangeReview,
+    'rebadge-home': RebadgeHome,
+    'rebadge-wizard': RebadgeWizard,
     'air-home': AirHome,
     'air-upload': AirUpload,
     'air-wizard': AirWizard,

@@ -405,9 +405,16 @@ function Configure({ state, set }) {
           )}
         </div>
 
-        {preview.warnings.length > 0 && (
-          <div className="banner-interp">{preview.warnings.join(' · ')}</div>
-        )}
+        {/* Always present, so the notes arriving with the preview cannot push
+            the facing column around — and an empty run says so rather than
+            leaving the engineer wondering whether it checked. */}
+        <div className={`preview-notes${preview.warnings.length ? ' has-notes' : ''}`}>
+          {preview.warnings.length
+            ? preview.warnings.join(' · ')
+            : complete && !preview.busy && !preview.error
+              ? 'No notes for this sheet.'
+              : ' '}
+        </div>
 
         <div className="row status-strip">
           <span className={`dot ${complete ? 'ok' : 'idle'}`} />

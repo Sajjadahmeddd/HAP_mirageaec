@@ -690,10 +690,17 @@ div.module-tile:not(.built) { opacity: .72; }
 }
 .btn-step:hover { border-color: var(--green); color: var(--green-dark); }
 
+/* A fixed box, not one that grows to its picture.
+   The preview arrives asynchronously, and letting it size the stage made the
+   whole row taller when it landed — which pushed the PDF Metadata panel down
+   the moment the render finished, since it is pinned to the bottom of the
+   facing column. Reserving the space keeps both columns still. A zoomed-in
+   preview scrolls inside instead. */
 .preview-stage {
   background: #EFEFEC; border: 1px solid var(--border); border-radius: 12px;
   display: flex; align-items: center; justify-content: center;
-  padding: 18px; overflow: auto; min-height: 220px;
+  padding: 18px; overflow: auto;
+  height: clamp(260px, 46vh, 560px); flex: none;
 }
 .preview-frame { position: relative; background: #fff; padding: 6px; border-radius: 6px; }
 .preview-frame img { display: block; border: 1px dashed var(--green); border-radius: 4px; }
@@ -701,6 +708,18 @@ div.module-tile:not(.built) { opacity: .72; }
   position: absolute; top: -11px; right: 8px; z-index: 1;
   background: var(--green); color: #fff; border-radius: 6px;
   padding: 3px 9px; font-size: 10px; font-weight: 700;
+}
+
+/* the preview's notes keep their place whether or not there are any */
+.preview-notes {
+  min-height: 40px; display: flex; align-items: center;
+  padding: 9px 14px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--card);
+  font-size: 11px; color: var(--muted);
+}
+.preview-notes.has-notes {
+  background: var(--amber-soft); border-color: var(--amber-line);
+  color: var(--amber-ink); font-weight: 700;
 }
 
 .status-strip {

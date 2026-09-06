@@ -718,3 +718,29 @@ div.module-tile:not(.built) { opacity: .72; }
 .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .stat-tile { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
 .stat-tile .stat { font-size: 26px; font-weight: 800; color: var(--navy); line-height: 1.2; }
+
+/* the Configure screen gives the form and the preview equal room: the
+   preview is what gets approved, so it is not a sidebar */
+.split.even { grid-template-columns: 1fr 1fr; }
+
+/* The wizard is a stack of sections, not a pane to be squeezed: `.page > *`
+   may shrink below its content, which pushed the footer past the bottom of
+   its own parent so its margin fell outside the scroll area and was clipped.
+   Growing but never shrinking keeps the buttons clear of the window edge. */
+.page > .wizard-page { flex: 1 0 auto; }
+
+/* the wizard's actions clear the bottom of the window rather than sitting on
+   the edge of it */
+.wizard-footer { margin-bottom: 26px; }
+
+.stacked-field em { font-style: normal; color: var(--muted); }
+
+/* the closing band on the export screen, from the design */
+.result-band {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 14px; padding: 14px 22px; margin-bottom: 26px;
+}
+.result-band > div { display: flex; flex-direction: column; gap: 3px; }
+.result-band strong { font-size: 12px; font-weight: 700; color: var(--text); }
+.result-band span { font-size: 11px; color: var(--muted); }

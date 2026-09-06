@@ -38,11 +38,33 @@ const TEMPLATE_RULES = [
   'Drawing number', 'Revision / date', 'PDF metadata',
 ]
 
-const RESULT_BAND = [
-  ['Batch Processing', (n) => `${n} sheet(s) processed`],
-  ['Branding Consistency', () => 'Title block aligned'],
-  ['Metadata Alignment', () => 'Revision history updated'],
-  ['Drawing Preservation', () => 'Geometry unchanged'],
+/** The closing band from the design. It reads ahead on the review screen and
+ *  back on the export screen, so the same four promises bracket the run. */
+function ResultBand({ items }) {
+  return (
+    <div className="result-band">
+      {items.map(([title, detail]) => (
+        <div key={title}>
+          <strong>{title}</strong>
+          <span>{detail}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+const BAND_BEFORE = (n) => [
+  ['Batch Processing', `${n} sheet(s) selected`],
+  ['Branding Consistency', 'Title block will be updated'],
+  ['Metadata Alignment', 'A revision row will be added'],
+  ['Drawing Preservation', 'Geometry left untouched'],
+]
+
+const BAND_AFTER = (n) => [
+  ['Batch Processing', `${n} sheet(s) processed`],
+  ['Branding Consistency', 'Title block aligned'],
+  ['Metadata Alignment', 'Revision history updated'],
+  ['Drawing Preservation', 'Geometry unchanged'],
 ]
 
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
@@ -411,8 +433,12 @@ function Confirm({ state }) {
     (s) => s.ok && s.current?.rev
            && s.current.rev.trim().toUpperCase() === state.inputs.rev.trim().toUpperCase())
 
+  const revOf = (name) =>
+    state.checks?.sheets.find((s) => s.filename === name)?.current?.rev || '—'
+
   return (
-    <div className="card col" style={{ padding: '18px 24px' }}>
+    <>
+    <div className="card col grow" style={{ padding: '18px 24px' }}>
       <div>
         <h2 className="h2">Confirm the rebadge</h2>
         <div className="small">
@@ -450,12 +476,35 @@ function Confirm({ state }) {
         </div>
       )}
 
+      <div className="h2" style={{ fontSize: 13 }}>Sheets in this run</div>
+      <div className="table-wrap grow">
+        <table className="grid">
+          <thead>
+            <tr><th>Sheet</th><th>Revision</th><th>Output file</th></tr>
+          </thead>
+          <tbody>
+            {chosen.map((file) => (
+              <tr key={file.name}>
+                <td>{file.name}</td>
+                <td>
+                  {revOf(file.name)} &nbsp;→&nbsp;
+                  <strong>{state.inputs.rev}</strong>
+                </td>
+                <td>{file.name.replace(/\.pdf$/i, '')}_rebadged.pdf</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       <div className="small">
         {chosen.length} sheet(s) will be rebadged. Each becomes a new file named
         <code> &lt;original&gt;_rebadged.pdf</code>
         {chosen.length > 1 && ', delivered as one ZIP with an audit record'}.
       </div>
     </div>
+    <ResultBand items={BAND_BEFORE(chosen.length)} />
+    </>
   )
 }
 
@@ -604,30 +653,38 @@ function Export({ state, onRestart, onHome }) {
         <div className="col">
           <div>
             <h2 className="h2">Processing Summary</h2>
-            <div className="small">Final results for this rebadging job.</div>
+            <div className="small">
+              What this run did: how many sheets were rebadged, how many were
+              skipped, and anything worth a second look.
+            </div>
           </div>
 
           <div className="stat-row">
             <div className="stat-tile">
-              <div className="key">SHEETS PROCESSED</div>
+              <div className="key">SHEETS REBADGED</div>
               <div className="stat">{summary?.ok_count}</div>
+              <div className="small">of {summary?.total} submitted</div>
+            </div>
+            <div className="stat-tile">
+              <div className="key">SKIPPED</div>
+              <div className="stat">{summary?.error_count}</div>
               <div className="small">
-                {summary?.total ? Math.round(100 * summary.ok_count / summary.total) : 0}%
+                {summary?.error_count ? 'could not be edited' : 'none — all sheets done'}
               </div>
             </div>
             <div className="stat-tile">
-              <div className="key">ERRORS</div>
-              <div className="stat">{summary?.error_count}</div>
-              <div className="small">{summary?.error_count ? 'Review' : 'Passed'}</div>
-            </div>
-            <div className="stat-tile">
-              <div className="key">INFORMATIONAL</div>
+              <div className="key">NOTES</div>
               <div className="stat">{summary?.warning_count}</div>
-              <div className="small">Reviewed</div>
+              <div className="small">
+                {summary?.warning_count ? 'worth a look, nothing failed' : 'nothing to report'}
+              </div>
             </div>
           </div>
 
-          <div className="h2" style={{ fontSize: 13 }}>Applied rule groups</div>
+          <div>
+            <div className="h2" style={{ fontSize: 13 }}>Applied rule groups</div>
+            <div className="small">Each title-block field, and the sheets it reached.</div>
+          </div>
           <div className="table-wrap" style={{ minHeight: 0 }}>
             <table className="grid">
               <tbody>
@@ -652,15 +709,7 @@ function Export({ state, onRestart, onHome }) {
         </div>
       </div>
 
-      {/* the closing band from the design */}
-      <div className="result-band">
-        {RESULT_BAND.map(([title, detail]) => (
-          <div key={title}>
-            <strong>{title}</strong>
-            <span>{detail(summary?.ok_count ?? 0)}</span>
-          </div>
-        ))}
-      </div>
+      <ResultBand items={BAND_AFTER(summary?.ok_count ?? 0)} />
     </>
   )
 }

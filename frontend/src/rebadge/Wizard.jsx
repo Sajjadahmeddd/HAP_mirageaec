@@ -11,8 +11,9 @@
 // screen matches the design without offering dead controls.
 //
 // Checking and applying both put a progress screen up rather than freezing a
-// button: a set of thirty sheets is seconds of work, and silence for seconds
-// reads as a hang.
+// button. These are A1 CAD sheets: checking one costs about half a second and
+// rebadging one about two, so a set of thirty is a minute of waiting and
+// silence for a minute reads as a hang.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { rebadge } from '../api'
@@ -723,9 +724,17 @@ function Export({ state, onRestart, onHome }) {
 
 
 // -------------------------------------------------------------- the shell
+// At most this many requests for a set, so a large package does not become
+// hundreds of round trips while still reporting progress often enough to see.
+const MAX_REQUESTS = 20
+// Measured on the sample sheets. Only used to pace the apply bar, which
+// cannot report real progress: it is one request that returns one archive.
+const MS_PER_SHEET = 2500
+
 export default function Wizard({ ctx }) {
   const [step, setStep] = useState(1)
   const [percent, setPercent] = useState(0)
+  const [note, setNote] = useState('')
   const [state, setState] = useState({
     files: [], selected: [], mode: 'all', inputs: blankInputs(),
     checks: null, busy: '', error: '', result: null, finishedAt: '',
@@ -735,36 +744,61 @@ export default function Wizard({ ctx }) {
   const chosen = state.files.filter((f) => state.selected.includes(f.name))
   const complete = isComplete(state.inputs)
 
-  /** Creep the bar while one synchronous request is in flight. */
-  const creep = () => {
-    setPercent(4)
-    return setInterval(
-      () => setPercent((p) => (p < 90 ? p + Math.max(1, (90 - p) / 14) : p)), 140)
+  /** Pace the bar for a request that cannot report its own progress.
+   *
+   *  Linear against a measured rate rather than easing towards a ceiling: an
+   *  asymptotic creep reaches ~90% in a second and then sits there, which
+   *  reads as a hang however honest the intent.
+   */
+  const paced = (sheets) => {
+    const expected = Math.max(1200, sheets * MS_PER_SHEET)
+    const started = Date.now()
+    setPercent(0)
+    return setInterval(() => {
+      setPercent(Math.min(96, Math.round(100 * (Date.now() - started) / expected)))
+    }, 120)
   }
 
+  /** Real progress: the set is checked in batches and the bar counts sheets. */
   const check = async () => {
+    const total = state.files.length
+    const size = Math.max(1, Math.ceil(total / MAX_REQUESTS))
     set({ busy: 'validating', error: '' })
-    const timer = creep()
+    setPercent(0)
+    setNote(`0 of ${total} checked`)
+
+    const sheets = []
     try {
-      const report = await rebadge.validate(state.files)
-      clearInterval(timer)
-      setPercent(100)
-      set({
-        busy: '', checks: report,
-        selected: report.sheets.filter((s) => s.ok).map((s) => s.filename),
-        error: report.ok_count === 0
-          ? 'No sheet in this set can be rebadged — see the reasons below.' : '',
-      })
-      if (report.ok_count > 0 && report.error_count === 0) setStep(2)
+      for (let index = 0; index < total; index += size) {
+        const part = await rebadge.validate(state.files.slice(index, index + size))
+        sheets.push(...part.sheets)
+        const done = Math.min(index + size, total)
+        setPercent(Math.round((100 * done) / total))
+        setNote(`${done} of ${total} checked`)
+      }
     } catch (err) {
-      clearInterval(timer)
       set({ busy: '', error: err.message })
+      return
     }
+
+    const report = {
+      sheets,
+      ok_count: sheets.filter((s) => s.ok).length,
+      error_count: sheets.filter((s) => !s.ok).length,
+    }
+    set({
+      busy: '', checks: report,
+      selected: report.sheets.filter((s) => s.ok).map((s) => s.filename),
+      error: report.ok_count === 0
+        ? 'No sheet in this set can be rebadged — see the reasons below.' : '',
+    })
+    if (report.ok_count > 0 && report.error_count === 0) setStep(2)
   }
 
   const apply = async () => {
     set({ busy: 'applying', error: '' })
-    const timer = creep()
+    setNote(`${chosen.length} sheet(s) to rebadge`)
+    const timer = paced(chosen.length)
     try {
       const result = await rebadge.apply(chosen, payloadOf(state.inputs))
       clearInterval(timer)
@@ -837,7 +871,7 @@ export default function Wizard({ ctx }) {
       {busy === 'validating' && (
         <Working
           title="Checking sheets" chip="VALIDATING"
-          caption={`Reading the title block on ${state.files.length} sheet(s)…`}
+          caption={`Reading the title block — ${note}`}
           files={state.files} percent={percent}
           steps={['Sheets uploaded', 'Reading title blocks', 'Ready to configure']}
           current={percent >= 100 ? 3 : 2}
@@ -846,7 +880,7 @@ export default function Wizard({ ctx }) {
       {busy === 'applying' && (
         <Working
           title="Rebadging sheets" chip="OUTPUT: PDF"
-          caption={`Writing the new title block on ${chosen.length} sheet(s)…`}
+          caption={`Writing the new title block — ${note}`}
           files={chosen} percent={percent}
           steps={['Sheets checked', 'Rebadging', 'Packaging output']}
           current={percent >= 100 ? 3 : 2}

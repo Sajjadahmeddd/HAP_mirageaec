@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 
 import pymupdf
 
-from .locator import Cell, TitleBlock
+from .locator import Cell, TitleBlock, forget_spans
 from .models import HISTORY_COLUMNS, RebadgeInputs
 
 # Helvetica's cap height as a fraction of point size — what "vertically
@@ -105,6 +105,7 @@ def draw_centred(page: pymupdf.Page, block: TitleBlock, rect: pymupdf.Rect,
     page.insert_text(baseline * block.derotation, text,
                      fontname=style.fontname, fontsize=size,
                      rotate=block.rotation, color=(0, 0, 0))
+    forget_spans(page)                     # new glyphs on the page
     return warnings
 
 
@@ -120,6 +121,7 @@ def _redact(page: pymupdf.Page, block: TitleBlock, zone: pymupdf.Rect) -> str:
     page.add_redact_annot(target)
     page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE,
                           graphics=pymupdf.PDF_REDACT_LINE_ART_NONE)
+    forget_spans(page)                     # the text page just changed
 
     remaining = page.get_text("text", clip=target).strip()
     if remaining:

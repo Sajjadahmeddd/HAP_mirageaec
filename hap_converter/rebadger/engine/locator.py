@@ -136,8 +136,19 @@ def _segments(page: pymupdf.Page) -> tuple[list, list]:
 
 
 # ------------------------------------------------------------------- text
+# Extracting a text page from an A1 CAD drawing costs about a second, and the
+# reader asks for spans half a dozen times per sheet. Holding the result on the
+# page turns that into one extraction. It is cleared explicitly whenever the
+# page is edited — see `forget_spans` — so nothing can read a stale layout.
+_SPAN_CACHE = "_maec_rebadge_spans"
+
+
 def spans(page: pymupdf.Page) -> list[tuple[pymupdf.Rect, dict]]:
     """Every non-blank text span with its displayed bounding box."""
+    cached = getattr(page, _SPAN_CACHE, None)
+    if cached is not None:
+        return cached
+
     matrix = page.rotation_matrix
     out = []
     for block in page.get_text("dict")["blocks"]:
@@ -145,7 +156,44 @@ def spans(page: pymupdf.Page) -> list[tuple[pymupdf.Rect, dict]]:
             for span in line["spans"]:
                 if span["text"].strip():
                     out.append((pymupdf.Rect(span["bbox"]) * matrix, span))
+    try:
+        setattr(page, _SPAN_CACHE, out)
+    except AttributeError:
+        pass                      # a page that will not hold it just re-reads
     return out
+
+
+# Building the span dictionary costs about a second and a half on these
+# sheets, because it carries font and size for every glyph. `get_text("words")`
+# answers "what text is where" in about ten milliseconds. Only style matching
+# needs the expensive one, so everything else asks for words.
+_WORD_CACHE = "_maec_rebadge_words"
+
+
+def words(page: pymupdf.Page) -> list[tuple[pymupdf.Rect, str]]:
+    """Every word with its displayed box — the cheap read."""
+    cached = getattr(page, _WORD_CACHE, None)
+    if cached is not None:
+        return cached
+
+    matrix = page.rotation_matrix
+    out = [(pymupdf.Rect(x0, y0, x1, y1) * matrix, text)
+           for x0, y0, x1, y1, text, *_ in page.get_text("words")
+           if text.strip()]
+    try:
+        setattr(page, _WORD_CACHE, out)
+    except AttributeError:
+        pass
+    return out
+
+
+def forget_spans(page: pymupdf.Page) -> None:
+    """Drop the cached text. Call after anything that changes the page."""
+    for attribute in (_SPAN_CACHE, _WORD_CACHE):
+        try:
+            delattr(page, attribute)
+        except AttributeError:
+            pass
 
 
 def _labels(page: pymupdf.Page, text: str) -> list[pymupdf.Rect]:

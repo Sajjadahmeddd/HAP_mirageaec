@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pymupdf
 
-from .locator import Cell, TitleBlock, spans
+from .locator import Cell, TitleBlock, spans, words
 from .models import HistoryRow
 
 
@@ -30,8 +30,17 @@ def _value_span(page: pymupdf.Page, cell: Cell) -> dict | None:
 
 
 def read_cell(page: pymupdf.Page, cell: Cell) -> str:
-    found = _value_span(page, cell)
-    return found["text"] if found else ""
+    """The printed value in a cell.
+
+    The value zone already excludes the label, so every word inside it is part
+    of the value — no need for the span dictionary here, which is what keeps
+    validation fast.
+    """
+    inside = [(rect, text) for rect, text in words(page)
+              if cell.value_zone.intersects(rect)
+              and rect.y0 >= cell.label_rect.y1 - 0.6]
+    inside.sort(key=lambda pair: (round(pair[0].y0, 1), pair[0].x0))
+    return " ".join(text for _, text in inside).strip()
 
 
 def value_style(page: pymupdf.Page, cell: Cell) -> tuple[float, bool] | None:
@@ -45,16 +54,17 @@ def value_style(page: pymupdf.Page, cell: Cell) -> tuple[float, bool] | None:
 def read_history(page: pymupdf.Page, block: TitleBlock) -> list[HistoryRow]:
     """Every body row of the revision table, topmost first."""
     table = block.history
-    text_spans = spans(page)
+    found = words(page)
     rows: list[HistoryRow] = []
     for row_rect in table.rows:
         row = HistoryRow()
         for key in table.columns:
             cell_rect = table.cell(row_rect, key)
-            words = [span["text"].strip() for rect, span in text_spans
-                     if cell_rect.intersects(rect)
-                     and rect.y0 >= row_rect.y0 - 0.6 and rect.y1 <= row_rect.y1 + 0.6]
-            setattr(row, key, " ".join(w for w in words if w))
+            inside = [(rect, text) for rect, text in found
+                      if cell_rect.intersects(rect)
+                      and rect.y0 >= row_rect.y0 - 0.6 and rect.y1 <= row_rect.y1 + 0.6]
+            inside.sort(key=lambda pair: pair[0].x0)
+            setattr(row, key, " ".join(text for _, text in inside).strip())
         rows.append(row)
     return rows
 

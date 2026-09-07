@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pymupdf
 
-from . import editor, reader, verify
+from . import editor, locator, reader, verify
 from .locator import TitleBlock, TitleBlockError, find_title_block
 from .models import BatchResult, RebadgeInputs, SheetCheck, SheetResult
 
@@ -31,7 +31,7 @@ def _open(source: str | Path | bytes) -> pymupdf.Document:
 
 
 def _labels_found(page: pymupdf.Page) -> dict[str, bool]:
-    return {label: bool(page.search_for(label)) for label in _LABELS}
+    return {label: bool(locator.search(page, label)) for label in _LABELS}
 
 
 def check(source: str | Path | bytes, filename: str) -> SheetCheck:

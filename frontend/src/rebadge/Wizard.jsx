@@ -727,6 +727,11 @@ function Export({ state, onRestart, onHome }) {
 // At most this many requests for a set, so a large package does not become
 // hundreds of round trips while still reporting progress often enough to see.
 const MAX_REQUESTS = 20
+// How many of those requests are allowed to be in flight together. Sent one
+// after another, the connection is idle for every second the server spends
+// reading a sheet — and on a set of drawings the upload is a large part of the
+// wait. Three lanes keep the link busy without swamping a small instance.
+const LANES = 3
 // Measured on the sample sheets. Only used to pace the apply bar, which
 // cannot report real progress: it is one request that returns one archive.
 const MS_PER_SHEET = 2500
@@ -767,15 +772,32 @@ export default function Wizard({ ctx }) {
     setPercent(0)
     setNote(`0 of ${total} checked`)
 
+    const batches = []
+    for (let index = 0; index < total; index += size) {
+      batches.push(state.files.slice(index, index + size))
+    }
+
+    // Answers are collected by index so the report keeps the order the sheets
+    // were listed in, whichever lane happens to finish first.
+    const parts = new Array(batches.length)
+    let taken = 0
+    let checked = 0
+    const lane = async () => {
+      while (taken < batches.length) {
+        const mine = taken
+        taken += 1
+        parts[mine] = await rebadge.validate(batches[mine])
+        checked += batches[mine].length
+        setPercent(Math.round((100 * checked) / total))
+        setNote(`${checked} of ${total} checked`)
+      }
+    }
+
     const sheets = []
     try {
-      for (let index = 0; index < total; index += size) {
-        const part = await rebadge.validate(state.files.slice(index, index + size))
-        sheets.push(...part.sheets)
-        const done = Math.min(index + size, total)
-        setPercent(Math.round((100 * done) / total))
-        setNote(`${done} of ${total} checked`)
-      }
+      await Promise.all(
+        Array.from({ length: Math.min(LANES, batches.length) }, lane))
+      for (const part of parts) sheets.push(...part.sheets)
     } catch (err) {
       set({ busy: '', error: err.message })
       return

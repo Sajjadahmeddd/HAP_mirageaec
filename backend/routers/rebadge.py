@@ -28,6 +28,11 @@ from ..deps import MAX_UPLOAD_BYTES
 
 router = APIRouter(prefix="/api/rebadge", tags=["rebadge"])
 
+# These three routes are declared `def`, not `async def`, on purpose. Every one
+# of them spends seconds inside PyMuPDF, which is blocking C code. An `async`
+# route runs on the event loop itself, so that work stalls the entire worker —
+# no other request is read, and the health check cannot be answered either.
+# Declared sync, Starlette runs them in its threadpool and the loop stays free.
 PDF_SUFFIX = ".pdf"
 PDF_MIME = "application/pdf"
 ZIP_MIME = "application/zip"
@@ -83,7 +88,7 @@ def _inputs(payload: str) -> RebadgeInputs:
 
 
 @router.post("/validate")
-async def validate(files: list[UploadFile] = File(...)):
+def validate(files: list[UploadFile] = File(...)):
     """What each sheet will and will not allow, before anything is edited."""
     checks = []
     for name, data in _read(files):
@@ -105,7 +110,7 @@ async def validate(files: list[UploadFile] = File(...)):
 
 
 @router.post("/preview")
-async def preview(file: UploadFile = File(...), payload: str = Form(...)):
+def preview(file: UploadFile = File(...), payload: str = Form(...)):
     """The title block as it will actually look, rendered from the real edit."""
     inputs = _inputs(payload)
     (name, data), = _read([file])
@@ -144,7 +149,7 @@ def _summary(batch) -> str:
 
 
 @router.post("/apply")
-async def apply(files: list[UploadFile] = File(...), payload: str = Form(...)):
+def apply(files: list[UploadFile] = File(...), payload: str = Form(...)):
     """Rebadge the set: one PDF, or a ZIP of every sheet plus the audit."""
     inputs = _inputs(payload)
     sheets = _read(files)

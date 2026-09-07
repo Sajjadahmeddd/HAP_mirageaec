@@ -110,28 +110,36 @@ def _segments(page: pymupdf.Page) -> tuple[list, list]:
 
     Rectangles are unrolled into their four edges — the grid is drawn as a mix
     of both, and a cell boundary is a cell boundary however it was emitted.
+
+    An A1 drawing carries tens of thousands of endpoints, and sending each one
+    through `Point * Matrix` costs several times more than reading the drawings
+    did — every one of them builds two objects and crosses the binding twice.
+    The rotation is a single affine transform, so it is applied here as
+    arithmetic on floats: identical result, none of the wrapper cost.
     """
-    matrix = page.rotation_matrix
+    a, b, c, d, e, f = page.rotation_matrix
     horizontals: list[tuple[float, float, float]] = []
     verticals: list[tuple[float, float, float]] = []
 
     for drawing in page.get_drawings():
         for item in drawing["items"]:
             if item[0] == "l":
-                pairs = [(item[1], item[2])]
+                pairs = ((item[1], item[2]),)
             elif item[0] == "re":
                 rect = item[1]
-                pairs = [(rect.tl, rect.tr), (rect.tr, rect.br),
-                         (rect.br, rect.bl), (rect.bl, rect.tl)]
+                pairs = ((rect.tl, rect.tr), (rect.tr, rect.br),
+                         (rect.br, rect.bl), (rect.bl, rect.tl))
             else:
                 continue                       # curves are never grid lines
             for start, end in pairs:
-                p1 = pymupdf.Point(start) * matrix
-                p2 = pymupdf.Point(end) * matrix
-                if abs(p1.y - p2.y) < _STRAIGHT and abs(p1.x - p2.x) >= _STRAIGHT:
-                    horizontals.append((p1.y, min(p1.x, p2.x), max(p1.x, p2.x)))
-                elif abs(p1.x - p2.x) < _STRAIGHT and abs(p1.y - p2.y) >= _STRAIGHT:
-                    verticals.append((p1.x, min(p1.y, p2.y), max(p1.y, p2.y)))
+                x1 = start.x * a + start.y * c + e
+                y1 = start.x * b + start.y * d + f
+                x2 = end.x * a + end.y * c + e
+                y2 = end.x * b + end.y * d + f
+                if abs(y1 - y2) < _STRAIGHT and abs(x1 - x2) >= _STRAIGHT:
+                    horizontals.append((y1, min(x1, x2), max(x1, x2)))
+                elif abs(x1 - x2) < _STRAIGHT and abs(y1 - y2) >= _STRAIGHT:
+                    verticals.append((x1, min(y1, y2), max(y1, y2)))
     return horizontals, verticals
 
 
@@ -187,9 +195,35 @@ def words(page: pymupdf.Page) -> list[tuple[pymupdf.Rect, str]]:
     return out
 
 
+# `search_for` builds a text page, uses it for one query and throws it away,
+# and a sheet is searched once per label plus again for each value read. On
+# these drawings that extraction is ~10 ms, so the searches cost more than the
+# thing they are looking through. Extract once and pass it to every search.
+_TEXT_PAGE_CACHE = "_maec_rebadge_textpage"
+
+
+def text_page(page: pymupdf.Page) -> pymupdf.TextPage:
+    """The sheet's text page, extracted once."""
+    cached = getattr(page, _TEXT_PAGE_CACHE, None)
+    if cached is not None:
+        return cached
+
+    built = page.get_textpage()
+    try:
+        setattr(page, _TEXT_PAGE_CACHE, built)
+    except AttributeError:
+        pass                      # a page that will not hold it just re-reads
+    return built
+
+
+def search(page: pymupdf.Page, text: str) -> list[pymupdf.Rect]:
+    """Where `text` appears, in unrotated coordinates, via the shared page."""
+    return page.search_for(text, textpage=text_page(page))
+
+
 def forget_spans(page: pymupdf.Page) -> None:
     """Drop the cached text. Call after anything that changes the page."""
-    for attribute in (_SPAN_CACHE, _WORD_CACHE):
+    for attribute in (_SPAN_CACHE, _WORD_CACHE, _TEXT_PAGE_CACHE):
         try:
             delattr(page, attribute)
         except AttributeError:
@@ -197,7 +231,8 @@ def forget_spans(page: pymupdf.Page) -> None:
 
 
 def _labels(page: pymupdf.Page, text: str) -> list[pymupdf.Rect]:
-    return [hit * page.rotation_matrix for hit in page.search_for(text)]
+    matrix = page.rotation_matrix
+    return [hit * matrix for hit in search(page, text)]
 
 
 def find_label(page: pymupdf.Page, text: str) -> pymupdf.Rect:

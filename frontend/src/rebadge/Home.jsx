@@ -7,6 +7,7 @@
 
 import { useState } from 'react'
 import { Modal } from '../components.jsx'
+import { HeroImage } from '../HeroArt.jsx'
 import RecentPanel from '../RecentPanel.jsx'
 import { REBADGE } from '../recents'
 
@@ -34,7 +35,8 @@ function QuickCard({ glyph, title, body, enabled, onClick, note }) {
   )
 }
 
-/** The document-to-rebadge mark from the design's hero. */
+/** Stands in for the supplied artwork if it is ever missing, so the home
+ *  screen still reads rather than showing a broken image. */
 function RebadgeArt() {
   return (
     <svg viewBox="0 0 420 190" style={{ width: '100%', maxHeight: 210 }} aria-hidden="true">
@@ -71,7 +73,13 @@ export default function Home({ ctx }) {
         <div className="muted" style={{ whiteSpace: 'pre-line' }}>
           {'Update drawing branding, title blocks and PDF metadata\nacross complete AEC drawing packages without changing\nthe underlying technical drawing content.'}
         </div>
-        <div className="hero-slot"><RebadgeArt /></div>
+        <div className="hero-slot">
+          <HeroImage
+            src="/rebadging-home.jpg"
+            alt="A drawing sheet before and after rebadging: updated branding, metadata and title block, with the drawing itself unchanged"
+            fallback={RebadgeArt}
+          />
+        </div>
         <div className="feature-band">
           {FEATURES.map((f) => <div key={f}>{f}</div>)}
         </div>

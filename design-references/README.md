@@ -8,6 +8,7 @@ The originals the shipped assets were derived from. Nothing here is served —
 | `maec-one-login.png` | the reference design `Login.jsx` implements |
 | `maec-logo-original.png` | dark-ground brand logo (navy field, white "MA", gold "EC") |
 | `hapext-home-original.png` | source of `public/hapext-home.jpg` |
+| `rebadging-hero-original.png` | source of `public/rebadging-home.jpg` |
 | `login-background-original.png` | source of `public/login-background.jpg` |
 
 `public/maec-logo.png` is derived from the original: the navy ground is made

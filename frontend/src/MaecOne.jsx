@@ -81,7 +81,7 @@ export const MODULES = [
   { key: 'timesheet', icon: 'clock', tone: 'teal', title: 'Timesheet', body: 'Submit and manage your timesheets', href: '' },
   { key: 'expenses', icon: 'card', tone: 'amber', title: 'Expense Control', body: 'Track, approve and monitor expenses', href: '' },
   { key: 'attendance', icon: 'calendar', tone: 'rose', title: 'Attendance', body: 'Daily attendance and team overview', href: '' },
-  { key: 'kpa', icon: 'kpa', tone: 'blue', title: 'KPA', body: 'Manage KPAs and performance goals', href: '' },
+  { key: 'kpa', icon: 'kpa', tone: 'blue', title: 'KPI', body: 'Manage KPIs and performance goals', href: '' },
 ]
 
 /** Openable: the app we are, or one that has somewhere to send you. */

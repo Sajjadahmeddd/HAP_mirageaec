@@ -150,6 +150,14 @@ def _segments(page: pymupdf.Page) -> tuple[list, list]:
 # page is edited — see `forget_spans` — so nothing can read a stale layout.
 _SPAN_CACHE = "_maec_rebadge_spans"
 
+# `get_text("dict")` defaults to TEXTFLAGS_DICT, which sets TEXT_PRESERVE_IMAGES
+# — so MuPDF decodes every raster on the page in order to build image blocks.
+# These drawings carry ~50 of them at around 1000x880 each, and we read none of
+# them: all this call is ever asked for is the font size and weight of four
+# cells. Clearing that one flag takes the call from ~1.0s to ~9ms and returns
+# byte-for-byte identical spans.
+_STYLE_FLAGS = pymupdf.TEXTFLAGS_DICT & ~pymupdf.TEXT_PRESERVE_IMAGES
+
 
 def spans(page: pymupdf.Page) -> list[tuple[pymupdf.Rect, dict]]:
     """Every non-blank text span with its displayed bounding box."""
@@ -159,7 +167,7 @@ def spans(page: pymupdf.Page) -> list[tuple[pymupdf.Rect, dict]]:
 
     matrix = page.rotation_matrix
     out = []
-    for block in page.get_text("dict")["blocks"]:
+    for block in page.get_text("dict", flags=_STYLE_FLAGS)["blocks"]:
         for line in block.get("lines", []):
             for span in line["spans"]:
                 if span["text"].strip():

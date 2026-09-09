@@ -11,6 +11,7 @@ import { SESSION_EXPIRED, airsizer as airApi, auth as authApi } from './api'
 import Launcher from './Launcher.jsx'
 import Login from './Login.jsx'
 import { AIRSIZER, HAPEXT, save as saveRecent } from './recents'
+import { HOME_OF, LAUNCHER, LOGIN, TAB_OF, landing, pathOf } from './routes'
 
 import HapHome from './hapext/Home.jsx'
 import HapUpload from './hapext/Upload.jsx'
@@ -31,16 +32,38 @@ const TABS = ['HAPExt', 'AirSizer Pro', 'HAPAudit', 'PDF Rebadging']
 const VERSION = '1.2'
 
 export default function App() {
-  const [tab, setTab] = useState('HAPExt')
-  const [page, setPage] = useState('hap-home')
+  // Where we are, read from the address bar so a refresh and a pasted link
+  // both land somewhere real. `opened` false is the MAEC One launcher;
+  // reaching a module is always a deliberate choice, so a cold load of a
+  // module's inner screen is sent to that module's home (see routes.js).
+  const [route, setRoute] = useState(() => landing(window.location.pathname))
+  const { page, opened } = route
+  const tab = TAB_OF[page] || 'HAPExt'
 
   // null while we ask the server; then {enabled, authenticated, name, email}
   const [session, setSession] = useState(null)
 
-  // Signed in, but still on the MAEC One launcher rather than inside a
-  // module. Reaching a module is always a deliberate choice, so this starts
-  // false on every sign-in and on every reload of an existing session.
-  const [opened, setOpened] = useState(false)
+  /** Move to a screen, leaving the browser an entry to come Back to. */
+  const go = useCallback((next, { replace = false } = {}) => {
+    const path = next.opened ? pathOf(next.page) : LAUNCHER
+    if (replace || window.location.pathname === path) {
+      window.history.replaceState(next, '', path)
+    } else {
+      window.history.pushState(next, '', path)
+    }
+    setRoute(next)
+  }, [])
+
+  // Back and Forward. The entry we pushed carries the screen; the pathname is
+  // the fallback for an entry this build did not create.
+  useEffect(() => {
+    const popped = (event) =>
+      setRoute(event.state || landing(window.location.pathname))
+    window.addEventListener('popstate', popped)
+    return () => window.removeEventListener('popstate', popped)
+  }, [])
+
+  const setPage = useCallback((name) => go({ opened: true, page: name }), [go])
 
   // ---- HAPExt session
   const [pdf, setPdf] = useState(null)          // {file, name, pages, size}
@@ -84,10 +107,23 @@ export default function App() {
       .catch((err) => setAirError(err.message))
   }, [session?.authenticated])
 
+  // The sign-in screen and the launcher are addresses too, so the bar agrees
+  // with what is on screen however we got there — signing in, signing out, or
+  // a session lapsing mid-module.
+  useEffect(() => {
+    if (!session) return
+    const path = (session.enabled && !session.authenticated) ? LOGIN
+      : opened ? pathOf(page) : LAUNCHER
+    if (window.location.pathname !== path) {
+      window.history.replaceState(route, '', path)
+    }
+  }, [session, opened, page, route])
+
   // A lapsed session anywhere in the app drops straight back to the login
   useEffect(() => {
     const expired = () => {
-      setOpened(false)   // sign in again and you land on the launcher, not mid-module
+      // sign in again and you land on the launcher, not mid-module
+      setRoute({ opened: false, page: HOME_OF['HAPExt'] })
       setSession((s) => ({ ...(s || {}), enabled: true, authenticated: false }))
     }
     window.addEventListener(SESSION_EXPIRED, expired)
@@ -96,18 +132,15 @@ export default function App() {
 
   const signOut = async () => {
     try { await authApi.logout() } catch { /* the cookie goes either way */ }
-    setOpened(false)
     setSession({ enabled: true, authenticated: false })
     setConversion(null); setDetails(null); setLogo(null); setChangeResult(null)
     setSpaces([]); setSizingInputs({}); setResults({})
-    setPage('hap-home'); setTab('HAPExt')
+    go({ opened: false, page: HOME_OF['HAPExt'] }, { replace: true })
   }
 
   const goTab = (name) => {
     if (name === 'HAPAudit') return
-    setTab(name)
-    setPage({ 'HAPExt': 'hap-home', 'AirSizer Pro': 'air-home',
-              'PDF Rebadging': 'rebadge-home' }[name] || 'hap-home')
+    go({ opened: true, page: HOME_OF[name] || HOME_OF['HAPExt'] })
   }
 
   const recordSizing = useCallback((row, diffuser, values, result) => {
@@ -131,9 +164,8 @@ export default function App() {
     setAirImported(found)
     setAirDetails(null)
     setAirLogo(null)
-    setTab('AirSizer Pro')
-    setPage('air-wizard')
-  }, [])
+    go({ opened: true, page: 'air-wizard' })
+  }, [go])
 
   // ---- history (browser-local; see recents.js)
   const rememberConversion = useCallback((data) => {
@@ -151,9 +183,8 @@ export default function App() {
   const openConversion = useCallback((entry) => {
     setConversion({ ok: true, issues: [], ...entry.payload })
     setPdf(null)                       // the original file is not kept
-    setTab('HAPExt')
-    setPage('hap-result')
-  }, [])
+    go({ opened: true, page: 'hap-result' })
+  }, [go])
 
   /** Called from the AirSizer review screen once a session is worth keeping. */
   const rememberSizing = useCallback(() => {
@@ -178,9 +209,8 @@ export default function App() {
     setAirSource(p.source || '')
     setAirBaseName(p.baseName || '')
     if (p.visibleColumns) setVisibleColumns(p.visibleColumns)
-    setTab('AirSizer Pro')
-    setPage('air-wizard')
-  }, [])
+    go({ opened: true, page: 'air-wizard' })
+  }, [go])
 
   const ctx = {
     // navigation
@@ -230,7 +260,7 @@ export default function App() {
       <Launcher
         name={session.name}
         email={session.email}
-        onOpen={() => { setTab('HAPExt'); setPage('hap-home'); setOpened(true) }}
+        onOpen={() => go({ opened: true, page: HOME_OF['HAPExt'] })}
         onSignOut={signOut}
       />
     )
@@ -242,7 +272,7 @@ export default function App() {
         <button
           className="titlebar-home"
           title="Back to MAEC One"
-          onClick={() => setOpened(false)}
+          onClick={() => go({ opened: false, page })}
         >
           <img className="titlebar-logo" src="/maec-logo.png" alt="MAEC" />
         </button>

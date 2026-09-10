@@ -56,11 +56,8 @@ def test_hsts_only_once_deployed(monkeypatch, client):
     assert "Strict-Transport-Security" in TestClient(app).get("/").headers
 
 
-def test_headers_do_not_gate_anything(client):
+def test_headers_do_not_gate_anything(client, engineer_client):
     """The point of the whole file: nothing here changes who gets in."""
     assert client.get("/api/health").status_code == 200
     assert client.get("/").status_code == 200
-    signed_in = TestClient(app)
-    signed_in.post("/api/auth/login",
-                   json={"email": "mirageaec@mirage.com", "password": "hapext"})
-    assert signed_in.get("/api/airsizer/config").status_code == 200
+    assert engineer_client.get("/api/airsizer/config").status_code == 200

@@ -44,17 +44,10 @@ SCHEDULE_ROWS = [
 
 
 @pytest.fixture
-def client():
-    """Signed in, so these tests exercise the routers rather than the gate."""
-    from backend import auth
-
-    signed_in = TestClient(app)
-    response = signed_in.post(
-        "/api/auth/login",
-        json={"email": auth.email(), "password": auth.password()},
-    )
-    assert response.status_code == 200, "fixture could not sign in"
-    return signed_in
+def client(engineer_client):
+    """Signed in as an ordinary engineer, so these tests exercise the
+    routers rather than the gate — and prove a normal seat is enough."""
+    return engineer_client
 
 
 @pytest.fixture

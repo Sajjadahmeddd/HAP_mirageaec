@@ -64,30 +64,40 @@ export const ICONS = {
   ),
 }
 
-// The MAEC One products.
+// The products, and how each one looks.
 //
-// `internal` marks the one this app *is* — picking it opens HAPExt in place.
-// Every other product is its own Render service, so it gets an `href` and
-// picking it navigates there. Until that service exists the href is empty
-// and the tile reads "Coming soon".
-//
-// THIS LIST IS THE WHOLE RELEASE GATE. Deploy Timesheet, paste its URL into
-// its href, and its tile turns on. Nothing else changes.
-export const MODULES = [
-  { key: 'engineering', icon: 'tools', tone: 'blue', title: 'Engineering Tools', body: 'HAPExt, AirSizer Pro, HAPAudit & more', internal: true },
-  { key: 'projects', icon: 'project', tone: 'green', title: 'Project Management', body: 'Plan, track and deliver projects efficiently', href: '' },
-  { key: 'finance', icon: 'finance', tone: 'orange', title: 'Finance & Billing', body: 'Expenses, monitoring and invoice generation', href: '' },
-  { key: 'people', icon: 'people', tone: 'violet', title: 'People & HR', body: 'Attendance, leave, timesheet & more', href: '' },
-  { key: 'timesheet', icon: 'clock', tone: 'teal', title: 'Timesheet', body: 'Submit and manage your timesheets', href: '' },
-  { key: 'expenses', icon: 'card', tone: 'amber', title: 'Expense Control', body: 'Track, approve and monitor expenses', href: '' },
-  { key: 'attendance', icon: 'calendar', tone: 'rose', title: 'Attendance', body: 'Daily attendance and team overview', href: '' },
-  { key: 'kpa', icon: 'kpa', tone: 'blue', title: 'KPI', body: 'Manage KPIs and performance goals', href: '' },
-]
+// The LIST is no longer here. It comes from GET /api/auth/me, computed from
+// the organisation's subscriptions and this person's seats, because whether a
+// tile can be opened is an entitlement question and entitlements are not the
+// browser's to decide. What stays here is presentation — the icon and colour
+// a product wears — keyed by the same `key` the server sends.
+export const PRESENTATION = {
+  engineering: { icon: 'tools', tone: 'blue' },
+  projects: { icon: 'project', tone: 'green' },
+  finance: { icon: 'finance', tone: 'orange' },
+  people: { icon: 'people', tone: 'violet' },
+  timesheet: { icon: 'clock', tone: 'teal' },
+  expenses: { icon: 'card', tone: 'amber' },
+  attendance: { icon: 'calendar', tone: 'rose' },
+  kpa: { icon: 'kpa', tone: 'blue' },
+}
 
-/** Openable: the app we are, or one that has somewhere to send you. */
-export const isReady = (m) => !!m.internal || !!m.href
+// The product this deployment actually is: picking it opens in place rather
+// than navigating away.
+export const INTERNAL = 'engineering'
 
-export const READY = MODULES.filter(isReady).map((m) => m.key)
+/**
+ * Can this person open this product right now? Three things must hold: the
+ * service exists, they hold a seat, and there is somewhere to send them.
+ * The server decides the middle one. A `true` here only shows a tile — the
+ * API refuses the same request independently.
+ */
+export const isOpenable = (app) => (
+  !!app && app.status === 'live' && !!app.entitled
+  && (app.key === INTERNAL || !!app.base_url)
+)
+
+const look = (key) => PRESENTATION[key] || { icon: 'tools', tone: 'blue' }
 
 const CAPABILITIES = [
   ['shieldCheck', 'Secure Access'],
@@ -96,20 +106,24 @@ const CAPABILITIES = [
   ['cloud', 'Seamless Integration'],
 ]
 
+// Statements we can stand behind. The previous three claimed ISO 27001 and
+// SOC 2 Type II, which Mirage AEC does not hold — and a compliance claim on
+// a sign-in page is exactly what a client's procurement team checks.
 export const BADGES = [
-  ['ISO 27001', 'Compliant'],
-  ['SOC 2', 'Type II'],
-  ['Enterprise Grade', 'Security'],
+  ['Encrypted', 'in transit'],
+  ['Role-based', 'access'],
+  ['Every sign-in', 'audited'],
 ]
 
 /**
  * @param panel  the right-hand column: the sign-in card, or the welcome panel
- * @param onPick called with a module key when a ready tile is clicked. Omit
- *               it and the tiles are presentational, as on the sign-in screen
- *               — nothing there should look clickable before you are known.
- * @param ready  the module keys that can actually be opened
+ * @param apps   the catalogue from GET /api/auth/me. Before sign-in it comes
+ *               without an `entitled` field, so nothing is openable — which
+ *               is right: nothing should look clickable before you are known.
+ * @param onPick called with an app when an openable tile is clicked. Omit it
+ *               and the tiles are presentational.
  */
-export default function MaecOne({ panel, onPick, ready = [] }) {
+export default function MaecOne({ panel, apps = [], onPick }) {
   return (
     <div className="signin">
       <div className="signin-body">
@@ -129,22 +143,26 @@ export default function MaecOne({ panel, onPick, ready = [] }) {
           </p>
 
           <ul className="module-grid">
-            {MODULES.map(({ key, icon, tone, title, body }) => {
+            {apps.map((app) => {
+              const { key, name, description } = app
+              const { icon, tone } = look(key)
               const Icon = ICONS[icon]
-              const built = ready.includes(key)
-              const live = !!onPick && built
+              const built = app.status === 'live'
+              const live = !!onPick && isOpenable(app)
               // One face for both screens — including the state line, which is
               // why the two columns are the same height rather than merely
               // close. Only the wording changes with what you can do here.
               const face = (
                 <>
                   <span className={`module-icon tone-${tone}`}><Icon width="27" height="27" /></span>
-                  <h2>{title}</h2>
-                  <p>{body}</p>
+                  <h2>{name}</h2>
+                  <p>{description}</p>
                   <span className="module-state">
                     {live
                       ? <>Open <ICONS.arrow width="13" height="13" /></>
-                      : built ? 'Available' : 'Coming soon'}
+                      : built
+                        ? (onPick && !app.entitled ? 'No access' : 'Available')
+                        : 'Coming soon'}
                   </span>
                 </>
               )
@@ -155,8 +173,12 @@ export default function MaecOne({ panel, onPick, ready = [] }) {
                       type="button"
                       className={`module-tile${live ? ' live' : ''}`}
                       disabled={!live}
-                      title={live ? `Open ${title}` : `${title} is not built yet`}
-                      onClick={() => onPick(MODULES.find((m) => m.key === key))}
+                      title={
+                        live ? `Open ${name}`
+                          : built ? `You do not have access to ${name}`
+                            : `${name} is not built yet`
+                      }
+                      onClick={() => onPick(app)}
                     >
                       {face}
                     </button>

@@ -1,5 +1,6 @@
 # Render blueprint — one web service that serves both the API and the React
-# bundle, so there is a single URL and no CORS in production.
+# bundle, so there is a single URL and no CORS in production, plus the
+# PostgreSQL instance that holds identity.
 #
 # This file must sit at the ROOT of the repository, and the repository root
 # must be this `hap_converter` folder: every path below is relative to it.
@@ -9,6 +10,19 @@
 # The build compiles the frontend, then installs the Python side. Render's
 # native Python runtime ships with Node; if your chosen runtime does not have
 # it, see "Deploying without Node" in backend/README.md.
+
+databases:
+  # Identity lives here: people, roles, entitlements and the audit log.
+  #
+  # Declared in the blueprint rather than created by hand so that DATABASE_URL
+  # is wired automatically (see fromDatabase below) and nobody has to paste a
+  # connection string into the dashboard. It MUST share the web service's
+  # region: Render's internal connection string is not routable across
+  # regions, and the external one would send every query over the internet.
+  - name: maec-identity
+    plan: basic-256mb
+    region: singapore
+    postgresMajorVersion: "16"
 
 services:
   - type: web
@@ -22,7 +36,24 @@ services:
       npm --prefix frontend ci
       npm --prefix frontend run build
       pip install -r backend/requirements.txt
-    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT --timeout-keep-alive 120
+
+    # Three steps, and the order matters.
+    #
+    #   alembic   brings the schema up to date. Fatal if it fails: serving
+    #             against a half-migrated database is worse than not serving.
+    #   seed      makes sure the products, roles, permissions and the first
+    #             Global Admin exist. Idempotent, and it leaves existing
+    #             passwords alone. Best-effort — a missing BOOTSTRAP_ADMIN_*
+    #             should show up in the log, not take the service down.
+    #   uvicorn   serves.
+    #
+    # Migrations run at start rather than at build because Render's build
+    # environment is not guaranteed to reach the database's private network.
+    startCommand: >-
+      alembic -c backend/identity/alembic.ini upgrade head &&
+      (python -m backend.identity.seed || true) &&
+      uvicorn backend.main:app --host 0.0.0.0 --port $PORT --timeout-keep-alive 120
+
     healthCheckPath: /api/health
     envVars:
       - key: PYTHON_VERSION
@@ -30,19 +61,31 @@ services:
       - key: PYTHONUNBUFFERED
         value: "1"
 
-      # Signing in is always required, so leaving these unset does NOT open
-      # the app — it falls back to the built-in credentials in
-      # backend/auth.py, which anyone with repo access can read. Set both in
-      # the Render dashboard before sharing the URL; sync:false keeps them
-      # out of this file and out of git. The service says which password is
-      # in force at startup.
-      - key: MAEC_PASSWORD
+      # Wired from the database above — nothing to paste, nothing to leak.
+      # Render supplies a `postgresql://` URL; identity/config.py rewrites the
+      # scheme to name psycopg 3 explicitly, so it can be used as given.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: maec-identity
+          property: connectionString
+
+      # The first Global Admin, created by the seed on first boot. Set both in
+      # the dashboard before the first deploy; sync:false keeps them out of
+      # this file and out of git. Until they are set, nobody can sign in.
+      - key: BOOTSTRAP_ADMIN_EMAIL
         sync: false
-      - key: MAEC_EMAIL
+      - key: BOOTSTRAP_ADMIN_PASSWORD
         sync: false
+
+      # SEED_TEST_USER_EMAIL / SEED_TEST_USER_PASSWORD are deliberately absent:
+      # the test engineer is for developer machines only, never a deployment.
+      #
+      # SEED_RESET_PASSWORDS is also absent. Set it to 1 for one deploy to
+      # re-apply BOOTSTRAP_ADMIN_PASSWORD if that account is ever locked out
+      # of itself, then remove it again.
 
       # Signs the session cookie. generateValue makes Render mint a random
       # one on first deploy. Changing it signs everybody out — which is
       # also your "log everyone out now" switch.
-      - key: MAEC_SECRET_KEY
+      - key: SESSION_SECRET
         generateValue: true

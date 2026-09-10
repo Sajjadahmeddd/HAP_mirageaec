@@ -13,35 +13,50 @@ from pathlib import Path
 
 from contextlib import asynccontextmanager
 
+# Identity first: importing its config loads .env before anything below
+# reads the environment. A real environment variable always wins over the
+# file, so on Render — which has no .env — this changes nothing.
+from .identity import config as identity_config  # noqa: I001  (must be first)
+
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi.errors import RateLimitExceeded
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.sessions import SessionMiddleware
 
 from hap_converter import __version__
 
-from . import auth
 from .deps import airsizer_config, hapext_config
+from .identity import guard, router_admin, router_auth
 from .routers import airsizer, hapext, rebadge
 
 FRONTEND_DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Signing in is always required; say which password is in force so a
-    forgotten override cannot pass unnoticed on a public URL."""
-    if auth.using_default_password():
-        where = "on Render" if os.environ.get("RENDER") else "locally"
-        print(f"MAEC: auth ON, using the BUILT-IN password ({where}). "
-              "Set MAEC_PASSWORD to override it.")
-    else:
-        print("MAEC: auth ON (MAEC_PASSWORD configured).")
-    if not os.environ.get("MAEC_SECRET_KEY"):
-        print("MAEC: MAEC_SECRET_KEY unset — everyone is signed out on restart.")
+    """Signing in is always required. Say what the service is running on,
+    without echoing anything secret."""
+    where = "on Render" if identity_config.on_render() else "locally"
+    print(f"MAEC: auth ON — per-user sign-in against the identity database ({where}).")
+    if not os.environ.get("DATABASE_URL", "").strip():
+        print("MAEC: DATABASE_URL is not set — sign-in cannot work until it is.")
+    if not identity_config.session_secret_configured():
+        print("MAEC: SESSION_SECRET unset — everyone is signed out on restart.")
     yield
 
 
 app = FastAPI(title="MAEC", version=__version__, lifespan=lifespan)
+
+# Login is rate limited per IP (see identity/router_auth.py). The reply on
+# hitting it says nothing about whether the address exists.
+app.state.limiter = router_auth.limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def _too_many(request: Request, exc: RateLimitExceeded):
+    return JSONResponse({"detail": "Too many attempts. Try again in a minute."},
+                        status_code=429)
 
 
 # What the browser is allowed to do with a page we served. This is not an
@@ -88,27 +103,35 @@ SECURITY_HEADERS = {
 # Registered the other way round, request.session does not exist yet and
 # every request looks signed out.
 @app.middleware("http")
-async def guard(request: Request, call_next):
-    """Refuse API calls from anyone who has not signed in.
+async def gate(request: Request, call_next):
+    """Refuse API calls from anyone who may not make them.
 
     The SPA itself is always served — it has to load in order to show a login
     screen — so only /api/* is gated, minus the login exchange and health.
+    The rules live in identity/guard.py: a live account, Global Admin for
+    /api/admin/*, the CSRF header for admin mutations, and a seat on the
+    product for each product's routes. It reads the database, so it runs in
+    a worker thread rather than on the event loop.
     """
-    if auth.requires_auth(request.url.path) and not auth.is_signed_in(request):
-        return JSONResponse({"detail": "Sign in required."}, status_code=401)
+    refusal = await run_in_threadpool(guard.inspect, request)
+    if refusal is not None:
+        return refusal
     return await call_next(request)
 
 
 # Signed-cookie sessions: no server-side store, so a Render restart or a
 # second instance changes nothing. https_only is off in local development
 # because there is no TLS on 127.0.0.1.
+# No `domain` attribute, deliberately: the cookie is host-only. The company
+# site shares the registrable domain (mirageaec.com), and a cookie scoped to
+# .mirageaec.com would put our session inside its reach.
 app.add_middleware(
     SessionMiddleware,
-    secret_key=auth.secret_key(),
-    session_cookie="maec_session",
-    max_age=auth.SESSION_MAX_AGE,
+    secret_key=identity_config.session_secret(),
+    session_cookie=identity_config.SESSION_COOKIE,
+    max_age=identity_config.SESSION_MAX_AGE,
     same_site="lax",
-    https_only=bool(os.environ.get("RENDER")),
+    https_only=identity_config.on_render(),
 )
 
 
@@ -138,7 +161,8 @@ if os.environ.get("MAEC_DEV"):
         allow_headers=["*"],
     )
 
-app.include_router(auth.router)
+app.include_router(router_auth.router)
+app.include_router(router_admin.router)
 app.include_router(hapext.router)
 app.include_router(airsizer.router)
 app.include_router(rebadge.router)
@@ -154,7 +178,7 @@ async def health():
         "version": __version__,
         "modules": ["HAPExt", "AirSizer Pro"],
         "diffusers": len(air.diffusers),
-        "auth": "on" if auth.is_enabled() else "off",
+        "auth": "on",
     }
 
 

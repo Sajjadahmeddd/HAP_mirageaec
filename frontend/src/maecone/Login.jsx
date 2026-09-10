@@ -4,12 +4,14 @@
 // MaecOne.jsx, shared with the launcher. Here the tiles are presentational:
 // nothing should look clickable before we know who you are.
 //
-// One shared account for now; RBAC comes later. When it does, this file
-// stays as it is and only auth.verify() on the server changes.
+// Credentials are per person, checked against the identity database. The
+// tiles are drawn from the same catalogue the launcher uses, so both screens
+// always describe the same products — but before sign-in the server sends no
+// entitlements, so none of them can be opened.
 
 import { useEffect, useState } from 'react'
 import { auth } from './api'
-import MaecOne, { BADGES, ICONS, READY, Svg } from './MaecOne.jsx'
+import MaecOne, { BADGES, ICONS, Svg } from './MaecOne.jsx'
 
 const REMEMBER_KEY = 'maec.signin.email'
 
@@ -41,7 +43,7 @@ function Eye({ off }) {
   )
 }
 
-export default function Login({ onSignedIn }) {
+export default function Login({ apps = [], onSignedIn }) {
   const remembered = readRemembered()
   const [email, setEmail] = useState(remembered)
   const [password, setPassword] = useState('')
@@ -105,7 +107,7 @@ export default function Login({ onSignedIn }) {
           type="email"
           value={email}
           autoComplete="username"
-          placeholder="youremail@maec.com"
+          placeholder="you@mirageaec.com"
           onChange={(e) => { setEmail(e.target.value); setError('') }}
         />
       </div>
@@ -149,8 +151,9 @@ export default function Login({ onSignedIn }) {
       {error && <p className="signin-error">{error}</p>}
       {hint && (
         <p className="signin-hint">
-          This is a shared team account — ask your project lead for the
-          current password.
+          Your account is your own. Ask a MAEC One administrator to reset the
+          password — for security, we cannot tell you whether an address is
+          registered.
         </p>
       )}
 
@@ -173,7 +176,7 @@ export default function Login({ onSignedIn }) {
     </form>
   )
 
-  // ready without onPick: the tiles say what exists but stay inert —
-  // nothing should look clickable before we know who you are
-  return <MaecOne panel={card} ready={READY} />
+  // no onPick: the tiles say what exists but stay inert — nothing should
+  // look clickable before we know who you are
+  return <MaecOne panel={card} apps={apps} />
 }

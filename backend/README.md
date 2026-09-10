@@ -92,57 +92,93 @@ open question about whether that should fail the sheet instead.
 ## Sign-in
 
 A Render service has a **public URL**, so without a gate anyone holding the
-link could upload reports and pull schedules. `backend/auth.py` closes that
-with one shared account, and **signing in is always required** — there is no
-configuration that leaves the app open.
+link could upload reports and pull schedules. `backend/identity/` closes
+that, and **signing in is always required** — there is no configuration that
+leaves the app open.
+
+Accounts are per person, held in PostgreSQL, with argon2id password hashes.
+There is no shared credential and no built-in fallback account: an
+unseeded database means nobody can sign in, which is the safe direction.
 
 | Variable | Purpose |
 |---|---|
-| `MAEC_EMAIL` | The sign-in address. Defaults to `mirageaec@mirage.com`. |
-| `MAEC_PASSWORD` | The password. Defaults to the built-in one in `auth.py`. |
-| `MAEC_SECRET_KEY` | Signs the session cookie. Changing it signs everyone out. |
-| `MAEC_DISPLAY_NAME` | Who the launcher greets. Defaults to `Mirage AEC`. |
+| `DATABASE_URL` | PostgreSQL. `postgresql+psycopg://user:pass@host:5432/db` |
+| `SESSION_SECRET` | Signs the session cookie. Changing it signs everyone out. |
+| `BOOTSTRAP_ADMIN_EMAIL` | The first Global Admin, created by the seed. |
+| `BOOTSTRAP_ADMIN_PASSWORD` | That account's password. Minimum 12 characters. |
+| `SEED_TEST_USER_EMAIL` | An ordinary engineer, for testing the non-admin path. |
+| `SEED_TEST_USER_PASSWORD` | Set **both** or neither — unset means no test account. |
 
-⚠️ Unset does **not** mean open — it means the built-in credentials apply,
-and those are readable by anyone with repository access. Override both before
-sharing a URL. The service prints which password is in force at startup, and
-`/api/health` always reports `"auth": "on"`.
+`.env` is read at startup and is gitignored; a real environment variable
+always wins over the file, so Render (which has no `.env`) is unaffected.
+`MAEC_SECRET_KEY` is still honoured as a fallback for `SESSION_SECRET` so an
+existing Render value keeps working.
+
+### Setting up locally
+
+```powershell
+# once: create the database
+createdb -U postgres maec_identity
+
+# schema
+.\.venv\Scripts\python -m alembic -c backend/identity/alembic.ini upgrade head
+
+# people, products, roles and permissions — safe to re-run
+.\.venv\Scripts\python -m backend.identity.seed
+```
+
+The seed is idempotent: it looks every row up by its natural key before
+creating it, so a second run reports "nothing to do". Re-running it with a
+different `BOOTSTRAP_ADMIN_PASSWORD` resets that password, which is how a
+lost admin account is recovered without opening psql.
+
+To add a migration after changing `models.py`:
+
+```powershell
+.\.venv\Scripts\python -m alembic -c backend/identity/alembic.ini revision --autogenerate -m "what changed"
+```
+
+**Read the generated file before applying it.** Autogenerate cannot see
+triggers, and the initial migration carries one: `audit_logs` has a
+`BEFORE UPDATE OR DELETE` trigger that raises, so the append-only rule is
+enforced by the database and not merely by convention.
+
+### What is enforced, and where
 
 Everything under `/api/` is guarded except `/api/auth/*` and `/api/health`,
 so a route added for a new module is protected without touching the guard.
-`/docs`, `/redoc` and `/openapi.json` sit outside `/api/` and are named
-explicitly in `DOCS_PREFIXES`: they map every endpoint and its request
-shape, so they are gated rather than public — signed-in staff still get
-them on the running service. The SPA shell itself is always served — it
-has to load in order to show a login screen at all.
+`identity/guard.py` holds the rules and runs on every request:
 
-The session is a **signed cookie**, not a server-side session store, so it
-survives a restart or a second instance with no shared state. Cookies are
-`httponly` + `samesite=lax`, and `secure` whenever `RENDER` is set.
+- a session that resolves to an **active** user — read from the database each
+  time, so a suspension bites on the next request rather than at cookie
+  expiry;
+- `/api/admin/*` additionally requires **Global Admin**, and any mutation
+  there requires the CSRF header;
+- each product's routes require a **seat** on that product, so an unlicensed
+  person gets a 403 whatever the frontend rendered.
+
+`/docs`, `/redoc` and `/openapi.json` sit outside `/api/` and are named
+explicitly: they map every endpoint and its request shape, so they are gated
+rather than public. The SPA shell itself is always served — it has to load in
+order to show a login screen at all.
+
+Login is rate limited per IP, and an account locks for escalating periods
+after repeated failures. Every outcome — success, failure, lockout, logout —
+writes an `audit_logs` row with the address, the IP and the user agent. A
+failure always returns the same message and takes the same time, whether the
+address is unknown, the password wrong, or the account suspended or locked.
+
+The session is a **signed cookie**, not a server-side store, so it survives a
+restart or a second instance with no shared state. It is `httponly`,
+`samesite=lax`, `secure` on Render, and deliberately carries **no `domain`
+attribute**: the company site shares the registrable domain
+(`mirageaec.com`), and a cookie scoped to `.mirageaec.com` would place our
+session inside its reach.
 
 ⚠️ **Middleware order matters.** The guard is registered *before*
 `SessionMiddleware` so that Starlette runs the session decoder first.
 Registered the other way round, `request.session` does not exist when the
 guard reads it and every request looks signed out.
-
-Run it locally — the login screen appears either way:
-
-```powershell
-.\.venv\Scripts\python -m uvicorn backend.main:app --port 8000
-```
-
-To use your own credentials instead of the built-in ones:
-
-```powershell
-$env:MAEC_EMAIL = "you@example.com"
-$env:MAEC_PASSWORD = "something"
-.\.venv\Scripts\python -m uvicorn backend.main:app --port 8000
-```
-
-**Upgrading to per-user logins** is deliberately small: `auth.verify()` grows
-a username lookup against bcrypt hashes held in a `MAEC_USERS` env var, and
-`Login.jsx` gains a username field. The guard, the cookie, the routes and the
-rest of the frontend are untouched. Still no database.
 
 ## The launcher
 
@@ -183,19 +219,22 @@ driving in a real browser, not just the test client.
 
 ## Adding the other MAEC One modules
 
-`MODULES` in `frontend/src/MaecOne.jsx` is the release gate. Each product is
-its own Render service, so it carries an `href`; the one marked `internal` is
-this app and opens in place. Deploy a module, paste its URL into its `href`,
-and its tile turns on — on both the sign-in screen and the launcher, which
-read the same list.
+The tile list is **no longer a constant in the frontend**. `GET /api/auth/me`
+returns the catalogue, computed from the `applications` table, the
+organisation's `subscriptions` and the person's `user_licenses`. A tile is
+openable only when the product is `live`, the person holds a seat, and there
+is a `base_url` to send them to — and the API refuses the request
+independently, so a tile is a convenience rather than the gate.
 
-⚠️ **Sessions do not cross origins.** The cookie is scoped to this service's
-hostname, so a user sent to `maec-timesheet.onrender.com` will be asked to
-sign in again. Worse, `onrender.com` is on the Public Suffix List, so a cookie
-cannot be shared across `*.onrender.com` subdomains at all. Single sign-on
-across the eight needs either a custom domain (`hapext.maec.example` and
-friends, cookie on the parent) or a central auth service issuing tokens. Worth
-settling before the second module ships rather than after.
+To bring a product online: deploy it, set its `applications.base_url` and
+`status = 'live'`, then give people seats. Nothing is rebuilt.
+
+⚠️ **Sessions do not cross origins.** The cookie is host-only, so a user sent
+to another service is asked to sign in again. Single sign-on across the eight
+is a redirect-based token exchange (OIDC/JWT) issued by MAEC One Core once it
+is a service of its own at `auth.mirageaec.com` — deliberately not a cookie
+shared across subdomains, which would put our session in reach of the
+marketing site on the same registrable domain.
 
 ## Statelessness
 

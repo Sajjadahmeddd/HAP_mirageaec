@@ -1,0 +1,337 @@
+"""The identity schema.
+
+Every table is created now, including the ones the Global Admin screens fill
+in the next build, so there is one migration to reason about rather than a
+trail of them. Conventions:
+
+* UUID primary keys, timestamps with time zone;
+* `org_id` wherever a row belongs to a tenant. A second customer is a data
+  change, not a migration;
+* enumerations are plain strings with a CHECK, not native enums — adding a
+  value is then an ALTER of a constraint rather than a type migration;
+* `user_roles.scope_id` is an opaque string, deliberately not a foreign key.
+  Whether projects live in Core or in each application is undecided, and
+  this column has to work under either answer (see the brief, §12).
+
+`audit_logs` is append-only. Nothing in this codebase updates or deletes a
+row, and the migration installs a database trigger that refuses to, so the
+rule holds even for someone with a psql prompt.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy import (
+    JSON, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String,
+    Text, UniqueConstraint, Uuid,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+
+def now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+def _pk() -> Mapped[uuid.UUID]:
+    return mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+
+
+def _created() -> Mapped[datetime]:
+    return mapped_column(DateTime(timezone=True), nullable=False, default=now)
+
+
+# ------------------------------------------------------------------ tenancy
+class Organization(Base):
+    __tablename__ = "organizations"
+    __table_args__ = (
+        CheckConstraint("status IN ('active','suspended')", name="ck_organizations_status"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    domain: Mapped[str] = mapped_column(String(253), nullable=False, unique=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    created_at: Mapped[datetime] = _created()
+
+
+class User(Base):
+    __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint("org_id", "email", name="uq_users_org_email"),
+        CheckConstraint("status IN ('active','suspended','invited')", name="ck_users_status"),
+        CheckConstraint("email = lower(email)", name="ck_users_email_lower"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, index=True)
+    email: Mapped[str] = mapped_column(String(254), nullable=False)
+    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    department: Mapped[str | None] = mapped_column(String(120))
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    # Bumped on any change to this user's roles, licences or applicable tool
+    # rules. Sessions carry the value they were issued with; a mismatch is
+    # how a change takes effect in seconds rather than at cookie expiry.
+    permissions_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    failed_login_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = _created()
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    org: Mapped[Organization] = relationship()
+    roles: Mapped[list["UserRole"]] = relationship(
+        back_populates="user", foreign_keys="UserRole.user_id", cascade="all, delete-orphan")
+    licenses: Mapped[list["UserLicense"]] = relationship(
+        back_populates="user", foreign_keys="UserLicense.user_id", cascade="all, delete-orphan")
+
+
+# ------------------------------------------------------------ the products
+class Application(Base):
+    __tablename__ = "applications"
+    __table_args__ = (
+        CheckConstraint("status IN ('live','coming_soon')", name="ck_applications_status"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    key: Mapped[str] = mapped_column(String(40), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(300))
+    base_url: Mapped[str | None] = mapped_column(String(500))
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="coming_soon")
+
+
+class Subscription(Base):
+    """An organisation's right to an application, for a period."""
+    __tablename__ = "subscriptions"
+    __table_args__ = (
+        UniqueConstraint("org_id", "application_id", name="uq_subscriptions_org_app"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    application_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("applications.id", ondelete="CASCADE"), nullable=False)
+    seats: Mapped[int | None] = mapped_column(Integer)
+    valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now)
+    valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    application: Mapped[Application] = relationship()
+
+
+class UserLicense(Base):
+    """One seat of a subscription, held by a person."""
+    __tablename__ = "user_licenses"
+    __table_args__ = (
+        UniqueConstraint("user_id", "application_id", name="uq_user_licenses_user_app"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    application_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("applications.id", ondelete="CASCADE"), nullable=False)
+    assigned_at: Mapped[datetime] = _created()
+    assigned_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"))
+
+    user: Mapped[User] = relationship(back_populates="licenses", foreign_keys=[user_id])
+    application: Mapped[Application] = relationship()
+
+
+# ---------------------------------------------------------- authorisation
+class Role(Base):
+    __tablename__ = "roles"
+    __table_args__ = (
+        UniqueConstraint("org_id", "key", name="uq_roles_org_key"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    key: Mapped[str] = mapped_column(String(60), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(300))
+    # 1 is the top. Lower numbers administer higher ones.
+    level: Mapped[int] = mapped_column(Integer, nullable=False)
+    # NULL means a system role, shared by every organisation.
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    application_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("applications.id", ondelete="CASCADE"))
+    is_custom: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    permissions: Mapped[list["RolePermission"]] = relationship(
+        back_populates="role", cascade="all, delete-orphan")
+
+
+class Permission(Base):
+    """One thing that can be done. Keyed `app:module:action`, always three
+    parts, so the application is derivable from the key alone."""
+    __tablename__ = "permissions"
+    __table_args__ = (
+        UniqueConstraint("key", name="uq_permissions_key"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    key: Mapped[str] = mapped_column(String(120), nullable=False)
+    application_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("applications.id", ondelete="CASCADE"), nullable=False, index=True)
+    module_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(300))
+
+
+class RolePermission(Base):
+    __tablename__ = "role_permissions"
+    __table_args__ = (
+        CheckConstraint("effect IN ('allow','deny')", name="ck_role_permissions_effect"),
+    )
+
+    role_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True)
+    permission_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("permissions.id", ondelete="CASCADE"), primary_key=True)
+    effect: Mapped[str] = mapped_column(String(10), nullable=False)
+
+    role: Mapped[Role] = relationship(back_populates="permissions")
+    permission: Mapped[Permission] = relationship()
+
+
+SCOPE_TYPES = ("platform", "organization", "application", "project")
+
+
+class UserRole(Base):
+    """A person holds a role at a scope. The same role at several scopes is
+    several rows — a lead of two applications has two of these."""
+    __tablename__ = "user_roles"
+    __table_args__ = (
+        CheckConstraint(
+            "scope_type IN ('platform','organization','application','project')",
+            name="ck_user_roles_scope_type"),
+        # platform has no id; every other scope needs one
+        CheckConstraint(
+            "(scope_type = 'platform' AND scope_id IS NULL) OR "
+            "(scope_type <> 'platform' AND scope_id IS NOT NULL)",
+            name="ck_user_roles_scope_id"),
+        UniqueConstraint("user_id", "role_id", "scope_type", "scope_id",
+                         name="uq_user_roles_grant"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("roles.id", ondelete="CASCADE"), nullable=False)
+    scope_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    scope_id: Mapped[str | None] = mapped_column(String(120))
+    granted_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"))
+    granted_at: Mapped[datetime] = _created()
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped[User] = relationship(back_populates="roles", foreign_keys=[user_id])
+    role: Mapped[Role] = relationship()
+
+
+class ToolRule(Base):
+    """A per-organisation adjustment to what a role may do with one module.
+    It can only take away: nothing here grants what the role did not allow."""
+    __tablename__ = "tool_rules"
+    __table_args__ = (
+        CheckConstraint(
+            "access_level IN ('full','edit','view','hidden','no_access')",
+            name="ck_tool_rules_access_level"),
+        CheckConstraint("status IN ('active','controlled')", name="ck_tool_rules_status"),
+        UniqueConstraint("org_id", "application_id", "module_key", "role_id",
+                         name="uq_tool_rules_target"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    application_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("applications.id", ondelete="CASCADE"), nullable=False)
+    module_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    role_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("roles.id", ondelete="CASCADE"), nullable=False)
+    access_level: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=now, onupdate=now)
+
+
+# --------------------------------------------------- filled by Prompt 2
+class ProvisioningMap(Base):
+    __tablename__ = "provisioning_map"
+
+    id: Mapped[uuid.UUID] = _pk()
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    directory_group: Mapped[str] = mapped_column(String(200), nullable=False)
+    role_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("roles.id", ondelete="CASCADE"), nullable=False)
+    default_modules: Mapped[list | None] = mapped_column(JSON)
+    approval_type: Mapped[str | None] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+
+
+class ImportBatch(Base):
+    __tablename__ = "import_batches"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending','success','warnings','failed')",
+            name="ck_import_batches_status"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    filename: Mapped[str] = mapped_column(String(300), nullable=False)
+    uploaded_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"))
+    records_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    records_valid: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    records_failed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    report: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = _created()
+
+
+# ----------------------------------------------------------------- audit
+class AuditLog(Base):
+    """APPEND ONLY. There is no code path that updates or deletes a row, and
+    the migration adds a trigger so the database refuses to as well.
+
+    `actor_email` is copied in rather than joined, so the record of who did
+    something survives that account being renamed or removed.
+    """
+    __tablename__ = "audit_logs"
+    __table_args__ = (
+        CheckConstraint("result IN ('success','warning','blocked')", name="ck_audit_logs_result"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("organizations.id", ondelete="SET NULL"), index=True)
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    actor_email: Mapped[str | None] = mapped_column(String(254))
+    action: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    target_type: Mapped[str | None] = mapped_column(String(60))
+    target_id: Mapped[str | None] = mapped_column(String(120))
+    source: Mapped[str | None] = mapped_column(String(40))
+    result: Mapped[str] = mapped_column(String(20), nullable=False)
+    ip: Mapped[str | None] = mapped_column(String(64))
+    user_agent: Mapped[str | None] = mapped_column(String(400))
+    before: Mapped[dict | None] = mapped_column(JSON)
+    after: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=now, index=True)

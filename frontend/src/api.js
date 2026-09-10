@@ -1,9 +1,14 @@
-// Thin fetch wrappers. Every call maps to one endpoint that wraps one engine
-// function — no logic lives here.
+// Engineering Tools' client. Thin fetch wrappers: every call maps to one
+// endpoint that wraps one engine function — no logic lives here.
+//
+// Sign-in and the admin API are NOT here. They belong to MAEC One Core, and
+// live in maecone/api.js. This file imports one thing from there — the name
+// of the session-lapsed event — because the dependency runs that way round:
+// the product may lean on Core, never the reverse.
 
-// A 401 means the session lapsed mid-use. Tell the shell so it can drop back
-// to the login screen rather than surfacing a confusing error on the page.
-export const SESSION_EXPIRED = 'maec:session-expired'
+import { SESSION_EXPIRED } from './maecone/api'
+
+export { SESSION_EXPIRED }
 
 function checkAuth(response) {
   if (response.status === 401) {
@@ -62,28 +67,6 @@ export function base64ToBlob(b64, type) {
   return new Blob([bytes], { type })
 }
 
-// -------------------------------------------------------------------- auth
-export const auth = {
-  me() {
-    return fetch('/api/auth/me').then(asJson)
-  },
-  login(email, password) {
-    return fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    }).then(async (response) => {
-      if (response.status === 401) {
-        const body = await response.json().catch(() => ({}))
-        throw new Error(body.detail || 'Incorrect email address or password.')
-      }
-      return asJson(response)
-    })
-  },
-  logout() {
-    return fetch('/api/auth/logout', { method: 'POST' }).then(asJson)
-  },
-}
 
 // ------------------------------------------------------------------ HAPExt
 export const hapext = {

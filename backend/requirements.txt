@@ -9,3 +9,11 @@ itsdangerous>=2.1
 pymupdf>=1.24
 openpyxl>=3.1
 pillow>=10.0
+
+# Identity: MAEC One Core (backend/identity/)
+sqlalchemy>=2.0
+alembic
+psycopg[binary]
+argon2-cffi
+python-dotenv
+slowapi

@@ -357,6 +357,31 @@ def test_obvious_passwords_are_refused(weak):
         security.check_password_policy(weak)
 
 
+def test_the_minimum_is_eight():
+    """Eight, because rate limiting and argon2id do the work length would
+    only pretend to. What length cannot catch is predictability, which is
+    why the common-password list matters more than the count."""
+    assert security.MIN_PASSWORD_LENGTH == 8
+    security.check_password_policy("K9x!mQ2v")            # 8, unguessable
+    with pytest.raises(security.WeakPasswordError, match="at least 8"):
+        security.check_password_policy("K9x!mQ2")         # 7
+
+
+@pytest.mark.parametrize("guessable", [
+    "admin123",       # trailing digits are stripped -> "admin"
+    "mirage@2026",    # ...and trailing punctuation too
+    "Passw0rd!",
+    "hapext123",      # our own product names are the first thing tried
+    "maec2026",
+])
+def test_a_common_password_is_refused_however_long_it_is(guessable):
+    """Length is not the defence. These all clear eight characters and are
+    still the first things anyone targeting us would type."""
+    assert len(guessable) >= security.MIN_PASSWORD_LENGTH
+    with pytest.raises(security.WeakPasswordError, match="too common"):
+        security.check_password_policy(guessable)
+
+
 def test_a_password_must_not_contain_the_address(db):
     with pytest.raises(security.WeakPasswordError):
         security.check_password_policy("engineer-is-here-2026", email="engineer@mirageaec.com")

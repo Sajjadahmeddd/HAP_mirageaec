@@ -57,15 +57,31 @@ def needs_rehash(password_hash: str) -> bool:
         return False
 
 
-MIN_PASSWORD_LENGTH = 12
+# Eight, not twelve. Length on its own buys very little here: an online guess
+# runs into per-IP rate limiting and an escalating lockout long before it runs
+# into entropy, and an offline guess runs into argon2id, which is deliberately
+# expensive per attempt. What length does not defend against is a *predictable*
+# password, so the list below does the work the extra four characters would
+# have pretended to.
+MIN_PASSWORD_LENGTH = 8
 
-# Not a breach list — the handful of values that appear in every one.
+# Not a breach list — the values that appear near the top of every one, plus
+# the ones specific to this company that an outsider would try first. Trailing
+# digits and punctuation are stripped before the check, so `admin123`,
+# `mirage@2026` and `Passw0rd!` all reduce to something in here.
 OBVIOUS = frozenset({
-    "password", "password1", "password123", "passw0rd", "p@ssword",
+    "password", "password1", "password123", "passw0rd", "p@ssword", "pa55word",
     "123456", "12345678", "123456789", "1234567890", "123456789012",
-    "qwerty", "qwertyuiop", "letmein", "welcome", "welcome1", "admin",
-    "administrator", "changeme", "iloveyou", "abc123", "monkey", "dragon",
-    "mirage", "mirageaec", "maec", "hapext", "engineering",
+    "qwerty", "qwertyuiop", "qwertyui", "1qaz2wsx", "zaq12wsx", "asdfghjk",
+    "letmein", "welcome", "welcome1", "admin", "administrator", "changeme",
+    "iloveyou", "abc123", "monkey", "dragon", "trustno1", "sunshine",
+    "princess", "football", "baseball", "superman", "batman", "shadow",
+    "master", "michael", "charlie", "jessica", "hunter", "ranger", "soccer",
+    "starwars", "computer", "internet", "whatever", "freedom", "secret",
+    "login", "test", "temp", "temporary", "default", "guest", "user",
+    # anyone targeting us starts here
+    "mirage", "mirageaec", "mirageaecindia", "maec", "maecone",
+    "hapext", "hapaudit", "airsizer", "rebadge", "engineering",
 })
 
 

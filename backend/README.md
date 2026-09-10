@@ -105,7 +105,7 @@ unseeded database means nobody can sign in, which is the safe direction.
 | `DATABASE_URL` | PostgreSQL. `postgresql+psycopg://user:pass@host:5432/db` |
 | `SESSION_SECRET` | Signs the session cookie. Changing it signs everyone out. |
 | `BOOTSTRAP_ADMIN_EMAIL` | The first Global Admin, created by the seed. |
-| `BOOTSTRAP_ADMIN_PASSWORD` | That account's password. Minimum 12 characters. |
+| `BOOTSTRAP_ADMIN_PASSWORD` | That account's password. Minimum 8 characters, not a common one. |
 | `SEED_TEST_USER_EMAIL` | An ordinary engineer, for testing the non-admin path. |
 | `SEED_TEST_USER_PASSWORD` | Set **both** or neither — unset means no test account. |
 

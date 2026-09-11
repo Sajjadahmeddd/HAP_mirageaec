@@ -99,30 +99,44 @@ def _administers(db: Session, actor: User, role: Role,
     return False
 
 
-def grant_role(db: Session, *, actor: User, target: User, role: Role,
-               scope_type: str, scope_id: str | None,
-               request: Request | None = None) -> UserRole:
-    """Give `target` `role` at a scope — if `actor` may.
+def may_grant(db: Session, *, actor: User, target_org_id, role: Role,
+              scope_type: str, scope_id: str | None) -> str | None:
+    """Why this grant would be refused, or None if it would go through.
 
-    Non-escalation, enforced twice: the actor must administer the scope, and
-    must themselves hold every permission the role allows, there. Either
-    failure is a 403 in the caller and a `blocked` audit row here.
+    Asked, never acted on. `grant_role` calls it before writing, and the CSV
+    import calls it to build its preview — which is the only way the preview
+    can be guaranteed to match what the commit does. A second implementation
+    that agreed today would be a screen showing one thing and doing another
+    the first time the two drifted.
     """
-    if target.org_id != actor.org_id and not is_global_admin(db, actor):
-        _refuse(db, actor, target, role, scope_type, scope_id, request,
-                "actor and target are in different organisations")
+    if target_org_id != actor.org_id and not is_global_admin(db, actor):
+        return "actor and target are in different organisations"
     if not _administers(db, actor, role, scope_type, scope_id):
-        _refuse(db, actor, target, role, scope_type, scope_id, request,
-                "actor does not administer that scope")
-
+        return "actor does not administer that scope"
+    if is_global_admin(db, actor):
+        return None
+    probe = (scope_type, scope_id) if scope_type != "platform" else None
     allowed = db.scalars(select(RolePermission).where(
         RolePermission.role_id == role.id, RolePermission.effect == "allow")).all()
-    if not is_global_admin(db, actor):
-        probe = (scope_type, scope_id) if scope_type != "platform" else None
-        for rp in allowed:
-            if not can(db, actor, rp.permission.key, probe):
-                _refuse(db, actor, target, role, scope_type, scope_id, request,
-                        f"actor does not hold {rp.permission.key}")
+    for rp in allowed:
+        if not can(db, actor, rp.permission.key, probe):
+            return f"actor does not hold {rp.permission.key}"
+    return None
+
+
+def grant_role(db: Session, *, actor: User, target: User, role: Role,
+               scope_type: str, scope_id: str | None,
+               request: Request | None = None,
+               commit: bool = True) -> UserRole:
+    """Give `target` `role` at a scope — if `actor` may.
+
+    The rule lives in `may_grant`; this performs what that permits. A refusal
+    is a 403 in the caller and a `blocked` audit row here.
+    """
+    why = may_grant(db, actor=actor, target_org_id=target.org_id, role=role,
+                    scope_type=scope_type, scope_id=scope_id)
+    if why is not None:
+        _refuse(db, actor, target, role, scope_type, scope_id, request, why)
 
     grant = UserRole(user_id=target.id, role_id=role.id, scope_type=scope_type,
                      scope_id=scope_id, granted_by=actor.id)
@@ -133,7 +147,8 @@ def grant_role(db: Session, *, actor: User, target: User, role: Role,
           result="success", request=request,
           after={"role": role.key, "scope_type": scope_type, "scope_id": scope_id},
           commit=False)
-    db.commit()
+    if commit:
+        db.commit()
     return grant
 
 
@@ -209,7 +224,8 @@ def delete_user(db: Session, *, actor: User, target: User,
 # ------------------------------------------------------------- the person
 def create_user(db: Session, *, actor: User, email: str, display_name: str,
                 password: str, department: str | None = None,
-                status: str = "active", request: Request | None = None) -> User:
+                status: str = "active", request: Request | None = None,
+                commit: bool = True) -> User:
     """Create an account with a password the administrator chose.
 
     `must_change_password` is set, always. An administrator necessarily knows
@@ -241,7 +257,8 @@ def create_user(db: Session, *, actor: User, email: str, display_name: str,
           after={"email": user.email, "display_name": user.display_name,
                  "department": user.department, "status": user.status},
           commit=False)
-    db.commit()
+    if commit:
+        db.commit()
     return user
 
 
@@ -296,7 +313,8 @@ def seats_in_use(db: Session, org_id: uuid.UUID, application_id: uuid.UUID) -> i
 
 
 def assign_license(db: Session, *, actor: User, target: User, app: Application,
-                   request: Request | None = None) -> UserLicense:
+                   request: Request | None = None,
+                   commit: bool = True) -> UserLicense:
     """Give someone a seat — if the organisation has one to give.
 
     `seats` NULL means uncapped, which is how the seed writes it. A number
@@ -343,7 +361,8 @@ def assign_license(db: Session, *, actor: User, target: User, app: Application,
     audit(db, actor=actor, action="license.assign", target_type="user",
           target_id=target.id, result="success", request=request,
           application_id=app.id, after={"application": app.key}, commit=False)
-    db.commit()
+    if commit:
+        db.commit()
     return seat
 
 

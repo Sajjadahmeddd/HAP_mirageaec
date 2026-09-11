@@ -149,6 +149,24 @@ export const admin = {
     return send('POST', `/api/admin/users/${id}/reset-password`, { password })
   },
 
+  // ---- screen 005: bulk import
+  importValidate(file) {
+    const form = new FormData()
+    form.append('file', file)
+    return fetch('/api/admin/import/validate', {
+      method: 'POST', headers: csrfHeaders(), body: form,
+    }).then(asJson)
+  },
+  importCommit(batchId) {
+    return send('POST', '/api/admin/import/commit', { batch_id: batchId })
+  },
+  importBatches() {
+    return fetch('/api/admin/import/batches').then(asJson)
+  },
+  importTemplate() {
+    window.location.assign('/api/admin/import/template')
+  },
+
   // ---- screen 004: the audit log (read only, like the table itself)
   audit(params = {}) {
     const query = new URLSearchParams()

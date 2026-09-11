@@ -472,3 +472,31 @@
   gap: 12px;
   font-size: 13px;
 }
+
+/* --------------------------------------------------- onboarding (screen 005) */
+.maec-drop {
+  display: grid;
+  justify-items: center;
+  gap: 9px;
+  padding: 30px;
+  margin-bottom: 14px;
+  border: 2px dashed var(--maec-border-strong);
+  border-radius: var(--maec-radius);
+  background: var(--maec-row-header);
+  text-align: center;
+}
+.maec-drop.over { border-color: var(--maec-focus); background: var(--maec-scoped-fill); }
+.maec-drop p { margin: 0; font-size: 13px; }
+.maec-drop label { cursor: pointer; }
+
+.maec-problems {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  background: var(--maec-denied-fill);
+  color: var(--maec-denied-ink);
+  border-radius: var(--maec-radius-sm);
+  font-size: 13px;
+  display: grid;
+  gap: 5px;
+}

@@ -37,10 +37,30 @@ ADMIN_PREFIX = "/api/admin"
 # read: a Business & Commercial Lead sees the audit trail for the
 # applications they lead. The endpoint checks again and scopes the query, so
 # this is a narrowing of who gets past the door, not a replacement for the
-# lock behind it. GET only — nothing under /api/admin is writable by anyone
-# but a Global Admin.
-ADMIN_READER_PREFIX = "/api/admin/audit"
+# lock behind it.
+#
+# Exact paths, not a prefix. A prefix would hand the exception to anything
+# mounted under /api/admin/audit/ later — a retention endpoint, a purge, a
+# per-actor drill-down — without anyone deciding it should have it. Adding a
+# route here has to be a deliberate line in this file, which is the only form
+# of "deliberate" that survives someone who has not read OPEN-DECISIONS #9.
+ADMIN_READER_PATHS = frozenset({
+    "/api/admin/audit",
+    "/api/admin/audit/stats",
+    "/api/admin/audit/controls",
+    "/api/admin/audit/export",
+})
 SAFE_METHODS = frozenset({"GET", "HEAD"})
+
+
+def may_read_audit(path: str, method: str) -> bool:
+    """Is this exactly one of the audit reads, by a safe method?
+
+    Separated out so it can be asserted against directly — the question
+    "would a new sub-path inherit this?" should be answerable by a test, not
+    by reading the middleware.
+    """
+    return (path.rstrip("/") or "/") in ADMIN_READER_PATHS and method in SAFE_METHODS
 MUTATING = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 # Which product each API prefix belongs to. A request under one of these
@@ -112,8 +132,7 @@ def inspect(request: Request) -> JSONResponse | None:
             # resolved once and remembered: require_global_admin reads this
             # back rather than asking the same question a second time
             request.state.is_global_admin = is_global_admin(db, user)
-            reading_audit = (path.startswith(ADMIN_READER_PREFIX)
-                             and request.method in SAFE_METHODS
+            reading_audit = (may_read_audit(path, request.method)
                              and holds_business_admin(db, user))
             if not request.state.is_global_admin and not reading_audit:
                 audit(db, actor=user, action="admin.access", target_type="route",

@@ -241,13 +241,24 @@ one is the problem, and it will not look like a problem when it arrives.
 Global Admin**. It now has exactly one exception:
 
 ```python
-ADMIN_READER_PREFIX = "/api/admin/audit"
+ADMIN_READER_PATHS = frozenset({
+    "/api/admin/audit", "/api/admin/audit/stats",
+    "/api/admin/audit/controls", "/api/admin/audit/export",
+})
 SAFE_METHODS = frozenset({"GET", "HEAD"})
 ```
 
-A Business & Commercial Lead may reach audit **reads** — GET only, that
-prefix only — and the endpoint checks again and scopes the query to the
+A Business & Commercial Lead may reach those four audit **reads** — GET or
+HEAD only — and the endpoint checks again and scopes the query to the
 applications they lead. Two independent checks, as everywhere else.
+
+It is an **exact list, not a prefix**. It began as `startswith`, which would
+have handed the exception to anything mounted under `/api/admin/audit/`
+later — a retention endpoint, a purge, a per-actor drill-down — without
+anyone deciding it should have it. Adding a path now means a deliberate line
+in `guard.py`, which is the only form of "deliberate" that survives someone
+who has not read this file. `may_read_audit()` is separated out so a test
+can ask the question directly rather than reading the middleware.
 
 **Why it exists.** Screen 004 was specified to give Business Admins
 application-scoped audit visibility, but the guard and `require_global_admin`

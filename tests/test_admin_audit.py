@@ -325,3 +325,75 @@ def test_the_routes_are_read_only_in_the_source():
     text = source.read_text(encoding="utf-8")
     for verb in ("@router.post", "@router.put", "@router.patch", "@router.delete"):
         assert verb not in text, f"{verb} must never appear in admin_audit.py"
+
+
+# ------------------------------------------- the guard exception, precisely
+def test_the_guard_itself_refuses_non_get_not_just_the_absence_of_routes():
+    """Whether a Business Admin can write under /api/admin/audit must not
+    depend on no write route happening to exist there."""
+    from backend.identity.guard import may_read_audit
+    for method in ("POST", "PUT", "PATCH", "DELETE"):
+        assert may_read_audit("/api/admin/audit", method) is False, method
+    assert may_read_audit("/api/admin/audit", "GET") is True
+
+
+def test_a_future_sub_path_does_not_inherit_the_exception():
+    """The exception is an exact list, not a prefix. Anything mounted under
+    /api/admin/audit/ later has to be added here deliberately."""
+    from backend.identity.guard import may_read_audit
+    for path in ("/api/admin/audit/retention",
+                 "/api/admin/audit/purge",
+                 "/api/admin/audit/actor/someone",
+                 "/api/admin/audit/../users"):
+        assert may_read_audit(path, "GET") is False, path
+
+
+def test_the_exception_covers_exactly_the_four_audit_reads():
+    from backend.identity.guard import ADMIN_READER_PATHS
+    assert ADMIN_READER_PATHS == {
+        "/api/admin/audit", "/api/admin/audit/stats",
+        "/api/admin/audit/controls", "/api/admin/audit/export"}
+
+
+def test_a_business_admin_cannot_post_to_the_audit_path(lead_client):
+    """Through the real stack, not just the predicate."""
+    r = lead_client.post(AUDIT, headers={CSRF_HEADER: lead_client.csrf}, json={})
+    assert r.status_code == 403
+
+
+# --------------------------------- export shares the list's scope filter
+def test_list_stats_and_export_all_use_one_scope_filter():
+    """Export is where scoped data leaves the system as a file. If it built
+    its own query, that is the preview/commit divergence of screen 005 in a
+    more sensitive place — so assert the shared call directly."""
+    import inspect
+
+    from backend.identity import admin_audit
+    for fn in (admin_audit.list_audit, admin_audit.audit_stats,
+               admin_audit.export_audit):
+        assert "_filtered(" in inspect.getsource(fn), fn.__name__
+
+
+def test_the_export_is_bounded(admin_client):
+    from backend.identity import admin_audit
+    assert admin_audit.EXPORT_MAX == 50_000
+    assert "limit(EXPORT_MAX)" in __import__("inspect").getsource(
+        admin_audit.export_audit)
+
+
+# ----------------------------------- no card divides by an unscoped total
+def test_no_stat_card_is_a_proportion(admin_client):
+    """A percentage needs a denominator, and an unscoped denominator would
+    tell a Business Admin how much activity exists in applications they
+    cannot see. Every card is a plain count of rows they may read."""
+    import inspect
+
+    from backend.identity import admin_audit
+    source = inspect.getsource(admin_audit.audit_stats)
+    assert "/" not in source.replace("role.%", "").replace("license.%", "") \
+        .replace("tool_rule.%", "").replace("/audit/stats", ""), \
+        "audit_stats contains arithmetic division"
+
+    body = admin_client.get(f"{AUDIT}/stats").json()
+    for key, value in body.items():
+        assert isinstance(value, int), f"{key} is not a plain count"

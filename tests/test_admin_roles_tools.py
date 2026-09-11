@@ -161,6 +161,36 @@ def test_an_unknown_permission_key_is_refused(admin_client, db):
 
 
 # --------------------------------------------------- 002: the two rules
+def test_the_api_reports_which_rules_hide_and_which_block(admin_client, db):
+    """The contract a navigation would have to read.
+
+    `hides_from_nav` and `blocks_api` are what make the two levels
+    distinguishable to a consumer. Asserting them here — rather than that a
+    constant contains a string — is the difference between testing the
+    behaviour and testing the spelling.
+
+    NOTE: nothing consumes `hides_from_nav` yet. Until Engineering Tools'
+    navigation reads it, `hidden` blocks nothing and hides nothing. See
+    OPEN-DECISIONS.md.
+    """
+    employee = db_role(db, "employee")
+    admin_client.put(TOOLS, headers=headers(admin_client), json={"changes": [{
+        "application_key": "engineering", "module_key": "hapaudit",
+        "role_id": str(employee.id), "access_level": "hidden"}]})
+
+    cell = admin_client.get(TOOLS).json()["rules"]["engineering:hapaudit"][str(employee.id)]
+    assert cell["access_level"] == "hidden"
+    assert cell["hides_from_nav"] is True
+    assert cell["blocks_api"] is False           # hidden is not a boundary
+
+    admin_client.put(TOOLS, headers=headers(admin_client), json={"changes": [{
+        "application_key": "engineering", "module_key": "hapaudit",
+        "role_id": str(employee.id), "access_level": "no_access"}]})
+    cell = admin_client.get(TOOLS).json()["rules"]["engineering:hapaudit"][str(employee.id)]
+    assert cell["hides_from_nav"] is True
+    assert cell["blocks_api"] is True            # no_access is
+
+
 def test_hidden_and_no_access_are_stored_and_enforced_differently(db):
     """The distinction this screen exists to preserve.
 

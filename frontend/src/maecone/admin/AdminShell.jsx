@@ -11,6 +11,7 @@
 
 import { NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 
+import AuditScreen from './AuditScreen.jsx'
 import RolesScreen from './RolesScreen.jsx'
 import UsersScreen from './UsersScreen.jsx'
 import ToolsScreen from './ToolsScreen.jsx'
@@ -42,7 +43,7 @@ const TABS = [
 
 // Which tabs have a real screen behind them. The rest render a placeholder
 // rather than a fabricated one.
-const BUILT = new Set(['users', 'roles', 'tools'])
+const BUILT = new Set(['users', 'roles', 'tools', 'audit'])
 
 
 function initials(email = '') {
@@ -122,6 +123,7 @@ export default function AdminShell({ session, onSignOut }) {
           <Route index element={<Navigate to="users" replace />} />
           <Route path="users" element={<UsersScreen />} />
           <Route path="roles" element={<RolesScreen />} />
+          <Route path="audit" element={<AuditScreen />} />
           <Route path="tools" element={<ToolsScreen />} />
           {/* the remaining three arrive in the next build */}
           {TABS.filter((t) => !BUILT.has(t.path)).map(({ path, label, lede }) => (

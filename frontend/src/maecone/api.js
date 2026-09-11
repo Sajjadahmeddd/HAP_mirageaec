@@ -149,6 +149,29 @@ export const admin = {
     return send('POST', `/api/admin/users/${id}/reset-password`, { password })
   },
 
+  // ---- screen 004: the audit log (read only, like the table itself)
+  audit(params = {}) {
+    const query = new URLSearchParams()
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== '' && v !== null && v !== undefined) query.set(k, v)
+    })
+    return fetch(`/api/admin/audit?${query}`).then(asJson)
+  },
+  auditStats() {
+    return fetch('/api/admin/audit/stats').then(asJson)
+  },
+  auditControls() {
+    return fetch('/api/admin/audit/controls').then(asJson)
+  },
+  /** Downloads through the browser so the session cookie rides along. */
+  exportAudit(params = {}) {
+    const query = new URLSearchParams()
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== '' && v !== null && v !== undefined) query.set(k, v)
+    })
+    window.location.assign(`/api/admin/audit/export?${query}`)
+  },
+
   // ---- screen 002: per-organisation overrides
   toolRules() {
     return fetch('/api/admin/tool-rules').then(asJson)

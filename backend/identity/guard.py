@@ -25,11 +25,22 @@ from fastapi.responses import JSONResponse
 
 from . import security
 from .db import session_factory
-from .permissions import audit, entitled, is_global_admin, load_user
+from .permissions import (
+    audit, entitled, holds_business_admin, is_global_admin, load_user,
+)
 
 PUBLIC_PREFIXES = ("/api/auth/", "/api/health")
 DOCS_PREFIXES = ("/docs", "/redoc", "/openapi.json")
 ADMIN_PREFIX = "/api/admin"
+
+# The one place under /api/admin a non-Global-Admin may reach, and only to
+# read: a Business & Commercial Lead sees the audit trail for the
+# applications they lead. The endpoint checks again and scopes the query, so
+# this is a narrowing of who gets past the door, not a replacement for the
+# lock behind it. GET only — nothing under /api/admin is writable by anyone
+# but a Global Admin.
+ADMIN_READER_PREFIX = "/api/admin/audit"
+SAFE_METHODS = frozenset({"GET", "HEAD"})
 MUTATING = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 # Which product each API prefix belongs to. A request under one of these
@@ -101,7 +112,10 @@ def inspect(request: Request) -> JSONResponse | None:
             # resolved once and remembered: require_global_admin reads this
             # back rather than asking the same question a second time
             request.state.is_global_admin = is_global_admin(db, user)
-            if not request.state.is_global_admin:
+            reading_audit = (path.startswith(ADMIN_READER_PREFIX)
+                             and request.method in SAFE_METHODS
+                             and holds_business_admin(db, user))
+            if not request.state.is_global_admin and not reading_audit:
                 audit(db, actor=user, action="admin.access", target_type="route",
                       target_id=path, source="api", result="blocked", request=request)
                 return _refuse(403, "Global Admin only.")

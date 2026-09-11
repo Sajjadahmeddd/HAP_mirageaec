@@ -401,3 +401,74 @@
   gap: 12px;
   margin-top: 16px;
 }
+
+/* ------------------------------------------------------- audit (screen 004) */
+.maec-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+.maec-stat {
+  display: grid;
+  gap: 3px;
+  padding: 14px 16px;
+  background: var(--maec-row-header);
+  border: 1px solid var(--maec-border);
+  border-radius: var(--maec-radius-sm);
+}
+.maec-stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--maec-ink);
+}
+.maec-stat-label { font-size: 12px; font-weight: 600; color: var(--maec-ink-soft); }
+.maec-stat-hint { font-size: 11px; color: var(--maec-ink-faint); }
+
+.maec-mono {
+  font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.maec-faint { color: var(--maec-ink-faint); }
+
+.maec-detail {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--maec-row-header);
+  border: 1px solid var(--maec-border);
+  border-radius: var(--maec-radius-sm);
+}
+.maec-h4 { font-size: 12px; font-weight: 700; margin: 0 0 5px; color: var(--maec-ink-soft); }
+
+.maec-facts {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 5px 14px;
+  margin: 0 0 14px;
+  font-size: 13px;
+}
+.maec-facts dt { font-weight: 600; color: var(--maec-ink-soft); }
+.maec-facts dd { margin: 0; }
+
+.maec-diff { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.maec-diff pre {
+  margin: 0;
+  padding: 10px;
+  background: var(--maec-card);
+  border: 1px solid var(--maec-border);
+  border-radius: var(--maec-radius-sm);
+  font-size: 11px;
+  overflow-x: auto;
+}
+
+.maec-controls { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 9px; }
+.maec-controls li {
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  align-items: start;
+  gap: 12px;
+  font-size: 13px;
+}

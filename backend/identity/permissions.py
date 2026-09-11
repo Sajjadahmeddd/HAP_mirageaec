@@ -158,6 +158,18 @@ def _covers(grant: UserRole, user: User, app_key: str,
     return False
 
 
+def holds_business_admin(db: Session, user: User) -> bool:
+    """Does this person lead any application at all?
+
+    Used by the guard to decide whether to let them as far as the audit
+    reads; what they may then *see* is scoped by the endpoint.
+    """
+    try:
+        return any(g.role.key == "business_admin" for g in active_roles(db, user))
+    except Exception:
+        return False
+
+
 def is_global_admin(db: Session, user: User) -> bool:
     try:
         for grant in active_roles(db, user):

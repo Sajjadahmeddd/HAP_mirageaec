@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from backend.identity.config import CSRF_HEADER
 from backend.identity.models import (
-    Application, AuditLog, Role, Subscription, User, UserLicense, UserRole,
+    Application, AuditLog, Role, Subscription, User, UserRole,
 )
 
 from conftest import ADMIN_EMAIL, ENGINEER_EMAIL

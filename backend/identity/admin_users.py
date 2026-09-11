@@ -26,7 +26,7 @@ from .db import get_db
 from .models import (
     Application, Role, Subscription, User, UserLicense, UserRole,
 )
-from .permissions import audit, is_global_admin, require_global_admin
+from .permissions import is_global_admin, require_global_admin
 
 router = APIRouter(prefix="/api/admin", tags=["admin"],
                    dependencies=[Depends(require_global_admin)])

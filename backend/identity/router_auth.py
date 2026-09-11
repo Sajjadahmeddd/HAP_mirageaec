@@ -26,7 +26,7 @@ from .models import (
     Application, Organization, Subscription, User, UserLicense,
 )
 from .permissions import (
-    active_roles, audit, current_user, entitled, is_global_admin, now,
+    active_roles, audit, current_user, is_global_admin, now,
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])

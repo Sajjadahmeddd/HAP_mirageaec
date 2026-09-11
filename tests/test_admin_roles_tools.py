@@ -15,7 +15,7 @@ from sqlalchemy import select
 from backend.identity import permissions as perms
 from backend.identity.config import CSRF_HEADER
 from backend.identity.models import (
-    Permission, Role, RolePermission, ToolRule, User, UserRole,
+    Permission, Role, ToolRule, User, UserRole,
 )
 from backend.identity.permissions import can
 

@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 from . import security
 from .db import get_db
 from .models import (
-    Application, AuditLog, Permission, Role, RolePermission, Subscription,
+    Application, AuditLog, Permission, RolePermission, Subscription,
     ToolRule, User, UserLicense, UserRole,
 )
 

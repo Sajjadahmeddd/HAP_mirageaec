@@ -17,7 +17,7 @@ from backend.identity.config import CSRF_HEADER
 from backend.identity.models import Application, AuditLog, Role, User, UserRole
 from backend.identity.permissions import ANONYMOUS_ACTOR, audit
 
-from conftest import ADMIN_EMAIL, ENGINEER_EMAIL
+from conftest import ADMIN_EMAIL
 
 AUDIT = "/api/admin/audit"
 

@@ -229,3 +229,50 @@ the point at which it stops being a rename and starts being archaeology.
 **Note for Screen 004:** an audit row with nobody to name now stores the
 sentinel `(anonymous)` (a login attempt that supplied no address at all).
 Render that as `—` in the ACTOR column rather than showing the sentinel.
+
+---
+
+## 9. The guard has one path exception. The second one means restructure.
+
+**Status:** a line drawn in advance. The exception itself is fine; the second
+one is the problem, and it will not look like a problem when it arrives.
+
+`guard.inspect()` is one rule: **everything under `/api/admin/` requires
+Global Admin**. It now has exactly one exception:
+
+```python
+ADMIN_READER_PREFIX = "/api/admin/audit"
+SAFE_METHODS = frozenset({"GET", "HEAD"})
+```
+
+A Business & Commercial Lead may reach audit **reads** — GET only, that
+prefix only — and the endpoint checks again and scopes the query to the
+applications they lead. Two independent checks, as everywhere else.
+
+**Why it exists.** Screen 004 was specified to give Business Admins
+application-scoped audit visibility, but the guard and `require_global_admin`
+both refused them entry. The two bad options were building scoping nothing
+could reach (see #3, the same mistake) or quietly widening admin access to
+make it reachable (a security regression dressed as a feature). This is the
+narrow third: reachable, minimal, and checked twice.
+
+**The decision, made now:**
+
+> The guard is currently **one rule with one exception**. The second exception
+> is the point at which it stops being a rule and becomes a policy table.
+> When you reach for a second one, **stop and restructure**: replace the
+> prefix checks with an explicit per-route access declaration, so what each
+> route requires is stated at the route rather than inferred from a growing
+> list of string prefixes in the middleware.
+
+Write it down because **the second exception will look exactly as justified
+as this one did.** Each will be defensible on its own terms; the cost is only
+visible in aggregate, by which point the middleware is a place people are
+afraid to change. A pre-committed line is the only defence against that kind
+of drift, because the drift never announces itself.
+
+**What "restructure" means concretely:** the access requirement moves onto the
+route — a dependency or a declared marker the guard can read — and
+`guard.inspect()` asks the route what it needs instead of pattern-matching
+paths. The guard keeps its job (one check, before routing, fail-closed); it
+stops keeping a second copy of the routing table.

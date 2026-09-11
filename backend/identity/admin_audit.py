@@ -32,9 +32,9 @@ from sqlalchemy.orm import Session
 
 from . import config, security
 from .db import get_db
-from .models import Application, AuditLog, Role, User, UserRole
+from .models import Application, AuditLog, User
 from .permissions import (
-    ANONYMOUS_ACTOR, GLOBAL_ADMIN, active_roles, is_global_admin, require_user,
+    ANONYMOUS_ACTOR, active_roles, is_global_admin, require_user,
 )
 from . import router_auth
 

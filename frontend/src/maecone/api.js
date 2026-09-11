@@ -74,8 +74,40 @@ export const auth = {
   },
 }
 
+/** Every admin mutation carries the CSRF header; the server refuses without it. */
+function send(method, path, body) {
+  return fetch(path, {
+    method,
+    headers: csrfHeaders(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    body: body === undefined ? undefined : JSON.stringify(body),
+  }).then(asJson)
+}
+
 export const admin = {
   whoami() {
     return fetch('/api/admin/whoami').then(asJson)
+  },
+
+  // ---- screen 001: the role scheme
+  roles() {
+    return fetch('/api/admin/roles').then(asJson)
+  },
+  createRole(name, cloneFrom) {
+    return send('POST', '/api/admin/roles',
+                { name, clone_from: cloneFrom || null })
+  },
+  patchRole(id, patch) {
+    return send('PATCH', `/api/admin/roles/${id}`, patch)
+  },
+  deleteRole(id) {
+    return send('DELETE', `/api/admin/roles/${id}`)
+  },
+
+  // ---- screen 002: per-organisation overrides
+  toolRules() {
+    return fetch('/api/admin/tool-rules').then(asJson)
+  },
+  putToolRules(changes) {
+    return send('PUT', '/api/admin/tool-rules', { changes })
   },
 }

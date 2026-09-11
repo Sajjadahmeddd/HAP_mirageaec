@@ -11,6 +11,9 @@
 
 import { NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 
+import RolesScreen from './RolesScreen.jsx'
+import ToolsScreen from './ToolsScreen.jsx'
+
 // The other products, as top-level pills. Only Global Admin is built; the
 // rest are named so the shell reads as part of one platform rather than a
 // tool on its own, and they light up as those services arrive.
@@ -33,6 +36,11 @@ const TABS = [
   { path: 'onboarding', label: 'Onboarding',
     lede: 'Bulk import of people, with a validation report before anything is written.' },
 ]
+
+// Which tabs have a real screen behind them. The rest render a placeholder
+// rather than a fabricated one.
+const BUILT = new Set(['roles', 'tools'])
+
 
 function initials(email = '') {
   const local = email.split('@')[0] || ''
@@ -109,7 +117,10 @@ export default function AdminShell({ session, onSignOut }) {
       <main className="maec-body">
         <Routes>
           <Route index element={<Navigate to="roles" replace />} />
-          {TABS.map(({ path, label, lede }) => (
+          <Route path="roles" element={<RolesScreen />} />
+          <Route path="tools" element={<ToolsScreen />} />
+          {/* the remaining three arrive in the next build */}
+          {TABS.filter((t) => !BUILT.has(t.path)).map(({ path, label, lede }) => (
             <Route key={path} path={path}
                    element={<Placeholder label={label} lede={lede} />} />
           ))}

@@ -24,8 +24,8 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    JSON, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String,
-    Text, UniqueConstraint, Uuid,
+    JSON, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer,
+    String, Text, UniqueConstraint, Uuid, text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -82,6 +82,11 @@ class User(Base):
     permissions_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     failed_login_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set when an administrator creates the account or resets the password.
+    # Cleared once the person chooses their own, so an admin-known password is
+    # never the one guarding the account long-term.
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = _created()
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -316,6 +321,9 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
     __table_args__ = (
         CheckConstraint("result IN ('success','warning','blocked')", name="ck_audit_logs_result"),
+        # The audit screen always reads one organisation newest-first; this is
+        # the index that query wants, and this is the table that grows fastest.
+        Index("ix_audit_logs_org_created", "org_id", created_at_desc := text("created_at DESC")),
     )
 
     id: Mapped[uuid.UUID] = _pk()
@@ -325,6 +333,11 @@ class AuditLog(Base):
         Uuid, ForeignKey("users.id", ondelete="SET NULL"), index=True)
     actor_email: Mapped[str | None] = mapped_column(String(254))
     action: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    # Which product the event belongs to, where that is meaningful. Signing in
+    # is not about one application, so this stays NULL for those; a role grant
+    # or a tool rule is, and a Business Admin may only read their own.
+    application_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("applications.id", ondelete="SET NULL"))
     target_type: Mapped[str | None] = mapped_column(String(60))
     target_id: Mapped[str | None] = mapped_column(String(120))
     source: Mapped[str | None] = mapped_column(String(40))

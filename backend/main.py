@@ -28,7 +28,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from hap_converter import __version__
 
 from .deps import airsizer_config, hapext_config
-from .identity import guard, router_admin, router_auth
+from .identity import admin_roles, admin_tools, guard, router_admin, router_auth
 from .routers import airsizer, hapext, rebadge
 
 FRONTEND_DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
@@ -163,6 +163,8 @@ if os.environ.get("MAEC_DEV"):
 
 app.include_router(router_auth.router)
 app.include_router(router_admin.router)
+app.include_router(admin_roles.router)
+app.include_router(admin_tools.router)
 app.include_router(hapext.router)
 app.include_router(airsizer.router)
 app.include_router(rebadge.router)

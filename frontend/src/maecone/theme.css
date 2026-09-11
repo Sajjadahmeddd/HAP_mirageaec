@@ -260,3 +260,108 @@
 @media (prefers-reduced-motion: reduce) {
   .maec-toggle, .maec-toggle::after { transition: none; }
 }
+
+/* ------------------------------------------------- admin screens (001/002)
+   Every colour below resolves to a token defined at the top of this file.
+   Nothing here introduces a literal. */
+
+.maec-stack { display: flex; flex-direction: column; gap: var(--maec-gap); }
+
+.maec-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--maec-gap);
+  margin-bottom: 18px;
+}
+
+.maec-h2 { font-size: 15px; font-weight: 700; margin: 0 0 5px; }
+.maec-sub { color: var(--maec-ink-faint); font-size: 12px; margin-top: 2px; }
+
+.maec-toolbar { display: flex; gap: 10px; margin-bottom: 16px; }
+
+.maec-search {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 13px;
+  padding: 9px 13px;
+  border: 1px solid var(--maec-border-strong);
+  border-radius: var(--maec-radius-sm);
+  background: var(--maec-card);
+  color: var(--maec-ink);
+}
+.maec-search:focus-visible { outline: 2px solid var(--maec-focus); outline-offset: 1px; }
+
+.maec-select {
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 10px;
+  border: 1px solid var(--maec-border-strong);
+  border-radius: var(--maec-radius-sm);
+  background: var(--maec-card);
+  color: var(--maec-ink);
+  max-width: 100%;
+}
+.maec-select:focus-visible { outline: 2px solid var(--maec-focus); outline-offset: 1px; }
+/* the select carries the same state colour as the badge it replaces */
+.maec-select.tone-granted  { border-color: var(--maec-granted-ink); }
+.maec-select.tone-scoped   { border-color: var(--maec-scoped-ink); }
+.maec-select.tone-denied   { border-color: var(--maec-denied-ink); }
+.maec-select.tone-inactive { border-color: var(--maec-border-strong); }
+
+.maec-inline-form {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 14px;
+  margin-bottom: 16px;
+  background: var(--maec-row-header);
+  border: 1px solid var(--maec-border);
+  border-radius: var(--maec-radius-sm);
+}
+
+/* a wide matrix scrolls inside its own box; the page never scrolls sideways */
+.maec-table-wrap { overflow-x: auto; }
+
+.maec-linkish {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--maec-ink);
+  cursor: pointer;
+  text-align: left;
+}
+.maec-linkish:hover { color: var(--maec-focus); }
+.maec-linkish:focus-visible { outline: 2px solid var(--maec-focus); outline-offset: 2px; }
+
+.maec-switch-wrap { display: flex; align-items: center; gap: 9px; }
+
+.maec-error {
+  background: var(--maec-denied-fill);
+  color: var(--maec-denied-ink);
+  border-radius: var(--maec-radius-sm);
+  padding: 10px 13px;
+  font-size: 13px;
+  margin: 0 0 14px;
+}
+
+.maec-note {
+  background: var(--maec-scoped-fill);
+  color: var(--maec-scoped-ink);
+  border-radius: var(--maec-radius-sm);
+  padding: 10px 13px;
+  font-size: 13px;
+  margin: 0 0 14px;
+}
+
+.maec-legend { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 9px; }
+.maec-legend li {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  align-items: start;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--maec-ink-soft);
+}

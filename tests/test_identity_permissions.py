@@ -215,13 +215,33 @@ def test_an_unknown_permission_is_refused(db):
 
 
 # ------------------------------------------------------------ tool rules
-def test_a_tool_rule_can_take_a_module_away(db):
+def test_a_no_access_tool_rule_takes_a_module_away(db):
+    """`no_access` is the security boundary: the API refuses.
+
+    This test used to assert the same of `hidden`. It no longer does, because
+    the two were deliberately split — see the test below, and screen 002.
+    """
+    engineer = user(db, ENGINEER_EMAIL)
+    db.add(ToolRule(org_id=engineer.org_id, application_id=app(db).id, module_key="hapext",
+                    role_id=role(db, "employee").id, access_level="no_access"))
+    db.commit()
+    assert can(db, engineer, CONVERT) is False
+    assert can(db, engineer, "engineering:airsizer:convert") is True   # other modules untouched
+
+
+def test_a_hidden_tool_rule_does_not_block_the_api(db):
+    """`hidden` is navigation only, and that is the point of having both.
+
+    A team that simply does not use a tool should not see it; a team that
+    must not reach it needs `no_access`. Conflating them either clutters the
+    navigation or ships a boundary that is not one.
+    """
     engineer = user(db, ENGINEER_EMAIL)
     db.add(ToolRule(org_id=engineer.org_id, application_id=app(db).id, module_key="hapext",
                     role_id=role(db, "employee").id, access_level="hidden"))
     db.commit()
-    assert can(db, engineer, CONVERT) is False
-    assert can(db, engineer, "engineering:airsizer:convert") is True   # other modules untouched
+    assert can(db, engineer, CONVERT) is True
+    assert "hidden" in permissions.HIDES_FROM_NAV       # gone from the nav all the same
 
 
 def test_a_view_only_tool_rule_keeps_view_and_nothing_else(db):

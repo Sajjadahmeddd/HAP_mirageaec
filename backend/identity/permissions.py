@@ -35,16 +35,40 @@ GLOBAL_ADMIN = "global_admin"
 # Higher number: more specific. Most specific wins.
 SPECIFICITY = {"platform": 1, "organization": 2, "application": 3, "project": 4}
 
-# What each tool-rule level still permits. A rule can only narrow: `full`
-# and `edit` leave the role's answer alone (there is no per-action edit
-# semantic to apply yet), `view` keeps only the view action, and the last
-# two remove the module entirely.
+# What each tool-rule level still permits. A rule can only ever narrow what
+# the role already allowed — nothing here can turn a denial into a grant,
+# which is structural rather than a check: this runs after the role has
+# already decided, and it can only subtract.
+#
+# `hidden` and `no_access` are NOT the same thing, and collapsing them is the
+# mistake this table exists to prevent:
+#
+#   hidden     the module is not offered in the navigation, but the API still
+#              answers. Decluttering, not a boundary. Anyone who knows the
+#              URL can still call it — which is the point: it is for tools a
+#              team simply does not use, not for tools they must not reach.
+#   no_access  the API refuses. This is the security boundary.
+#
+# So `hidden` permits here and is filtered in the UI; `no_access` denies.
 _LEVEL_ALLOWS: dict[str, Callable[[str], bool]] = {
     "full": lambda action: True,
     "edit": lambda action: True,
     "view": lambda action: action == "view",
-    "hidden": lambda action: False,
-    "no_access": lambda action: False,
+    "hidden": lambda action: True,        # UX only — see above
+    "no_access": lambda action: False,    # the boundary
+}
+
+# Levels that take a module out of the navigation, whatever the API does.
+HIDES_FROM_NAV = frozenset({"hidden", "no_access"})
+
+# What each level implies a role should be able to do. Used on the write path
+# to refuse a rule that promises access the role does not grant.
+LEVEL_IMPLIES: dict[str, frozenset[str]] = {
+    "full": frozenset({"view", "convert", "export", "configure"}),
+    "edit": frozenset({"view", "convert", "export"}),
+    "view": frozenset({"view"}),
+    "hidden": frozenset(),
+    "no_access": frozenset(),
 }
 
 

@@ -302,6 +302,7 @@ def client_ip(request: Request | None) -> str | None:
 def audit(db: Session, *, action: str, result: str,
           actor: User | None = None, actor_email: str | None = None,
           org_id: uuid.UUID | None = None,
+          application_id: uuid.UUID | None = None,
           target_type: str | None = None, target_id: str | None = None,
           source: str | None = "api", request: Request | None = None,
           before: dict[str, Any] | None = None, after: dict[str, Any] | None = None,
@@ -316,6 +317,10 @@ def audit(db: Session, *, action: str, result: str,
     email = actor.email if actor else actor_email
     row = AuditLog(
         org_id=org_id or (actor.org_id if actor else None),
+        # Which product this concerns, where that is meaningful. Signing in is
+        # not about one application and stays NULL; a seat or a tool rule is,
+        # and a Business Admin may only read their own application's events.
+        application_id=application_id,
         actor_id=actor.id if actor else None,
         actor_email=(email[:254] if email else None),
         action=action[:80], target_type=(target_type[:60] if target_type else None),

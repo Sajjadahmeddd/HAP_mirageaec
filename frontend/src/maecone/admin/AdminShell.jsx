@@ -12,6 +12,7 @@
 import { NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 
 import RolesScreen from './RolesScreen.jsx'
+import UsersScreen from './UsersScreen.jsx'
 import ToolsScreen from './ToolsScreen.jsx'
 
 // The other products, as top-level pills. Only Global Admin is built; the
@@ -25,6 +26,8 @@ const SECTIONS = [
 ]
 
 const TABS = [
+  { path: 'users', label: 'Users & Access',
+    lede: 'Create people, assign roles and application seats, manage status.' },
   { path: 'roles', label: 'Roles & Permissions',
     lede: 'Who holds which role, at which scope, and what that lets them do.' },
   { path: 'tools', label: 'Tool Access',
@@ -39,7 +42,7 @@ const TABS = [
 
 // Which tabs have a real screen behind them. The rest render a placeholder
 // rather than a fabricated one.
-const BUILT = new Set(['roles', 'tools'])
+const BUILT = new Set(['users', 'roles', 'tools'])
 
 
 function initials(email = '') {
@@ -116,7 +119,8 @@ export default function AdminShell({ session, onSignOut }) {
 
       <main className="maec-body">
         <Routes>
-          <Route index element={<Navigate to="roles" replace />} />
+          <Route index element={<Navigate to="users" replace />} />
+          <Route path="users" element={<UsersScreen />} />
           <Route path="roles" element={<RolesScreen />} />
           <Route path="tools" element={<ToolsScreen />} />
           {/* the remaining three arrive in the next build */}
@@ -124,7 +128,7 @@ export default function AdminShell({ session, onSignOut }) {
             <Route key={path} path={path}
                    element={<Placeholder label={label} lede={lede} />} />
           ))}
-          <Route path="*" element={<Navigate to="/admin/roles" replace />} />
+          <Route path="*" element={<Navigate to="/admin/users" replace />} />
         </Routes>
       </main>
     </div>

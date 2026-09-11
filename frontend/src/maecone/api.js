@@ -72,6 +72,17 @@ export const auth = {
       .then(asJson)
       .finally(() => setCsrf(''))
   },
+
+  /** Reachable while must_change_password is set — it is the way out. */
+  changePassword(currentPassword, newPassword) {
+    return fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: csrfHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        current_password: currentPassword, new_password: newPassword,
+      }),
+    }).then(asJson).then(keepCsrf)
+  },
 }
 
 /** Every admin mutation carries the CSRF header; the server refuses without it. */
@@ -101,6 +112,41 @@ export const admin = {
   },
   deleteRole(id) {
     return send('DELETE', `/api/admin/roles/${id}`)
+  },
+
+  // ---- user management
+  users({ q = '', status = '', page = 1, page_size: size = 25 } = {}) {
+    const query = new URLSearchParams({ q, page, page_size: size })
+    if (status) query.set('status', status)
+    return fetch(`/api/admin/users?${query}`).then(asJson)
+  },
+  userOptions() {
+    return fetch('/api/admin/users/options').then(asJson)
+  },
+  createUser(body) {
+    return send('POST', '/api/admin/users', body)
+  },
+  patchUser(id, patch) {
+    return send('PATCH', `/api/admin/users/${id}`, patch)
+  },
+  deleteUser(id) {
+    return send('DELETE', `/api/admin/users/${id}`)
+  },
+  grantRole(id, grant) {
+    return send('POST', `/api/admin/users/${id}/roles`, grant)
+  },
+  revokeRole(id, grantId) {
+    return send('DELETE', `/api/admin/users/${id}/roles/${grantId}`)
+  },
+  assignLicense(id, applicationKey) {
+    return send('POST', `/api/admin/users/${id}/licenses`,
+                { application_key: applicationKey })
+  },
+  removeLicense(id, applicationKey) {
+    return send('DELETE', `/api/admin/users/${id}/licenses/${applicationKey}`)
+  },
+  resetPassword(id, password) {
+    return send('POST', `/api/admin/users/${id}/reset-password`, { password })
   },
 
   // ---- screen 002: per-organisation overrides

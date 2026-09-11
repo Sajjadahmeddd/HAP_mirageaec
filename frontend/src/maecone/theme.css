@@ -365,3 +365,39 @@
   font-size: 13px;
   color: var(--maec-ink-soft);
 }
+
+/* ---------------------------------------------- user management (screen 3) */
+.maec-h3 { font-size: 13px; font-weight: 700; margin: 20px 0 9px; }
+
+.maec-form {
+  padding: 16px;
+  margin-bottom: 16px;
+  background: var(--maec-row-header);
+  border: 1px solid var(--maec-border);
+  border-radius: var(--maec-radius-sm);
+}
+.maec-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.maec-form-grid label {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--maec-ink-soft);
+}
+.maec-form-actions { display: flex; gap: 9px; }
+
+.maec-chips { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 9px; }
+.maec-chips li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.maec-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}

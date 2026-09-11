@@ -14,12 +14,13 @@ from __future__ import annotations
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import security
+from . import accounts, security
 from .db import get_db
 from .models import Application, Organization, User
 from .permissions import (
@@ -90,6 +91,10 @@ def _me_payload(request: Request, db: Session, user: User) -> dict:
         ],
         "is_global_admin": is_global_admin(db, user),
         "permissions_version": user.permissions_version,
+        # The frontend routes to the change-password screen on this, and the
+        # guard refuses everything else until it clears — the flag is not the
+        # enforcement, it is the explanation for it.
+        "must_change_password": user.must_change_password,
         "apps": _apps_payload(db, user),
         "csrf_token": security.csrf_token(request),
     }
@@ -165,6 +170,46 @@ def login(request: Request, payload: dict, db: Session = Depends(get_db)):
     audit(db, actor=user, action="login.success", target_type="user", target_id=user.id,
           source="login", result="success", request=request, commit=False)
     db.commit()
+    return _me_payload(request, db, user)
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(min_length=1, max_length=1024)
+    new_password: str = Field(min_length=1, max_length=1024)
+
+
+@router.post("/change-password")
+def change_password(body: PasswordChange, request: Request,
+                    db: Session = Depends(get_db),
+                    user: User | None = Depends(current_user)):
+    """Set your own password.
+
+    Reachable while `must_change_password` is set — it is the one thing that
+    is, because it is the way out. The current password is still required:
+    an unattended session must not be enough to take an account over.
+    """
+    if user is None:
+        raise HTTPException(status_code=401, detail="Sign in required.")
+
+    if not security.verify_password(body.current_password, user.password_hash):
+        audit(db, actor=user, action="user.password.self", target_type="user",
+              target_id=user.id, result="warning", request=request,
+              after={"reason": "current password did not match"})
+        raise HTTPException(status_code=403, detail="That is not your current password.")
+
+    if body.new_password == body.current_password:
+        raise HTTPException(status_code=422,
+                            detail="The new password must be different.")
+
+    try:
+        accounts.set_password(db, actor=user, target=user, password=body.new_password,
+                              by_admin=False, request=request)
+    except security.WeakPasswordError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    # a new password is a good moment for a new session identifier
+    security.start_session(request, user_id=str(user.id),
+                           permissions_version=user.permissions_version)
     return _me_payload(request, db, user)
 
 

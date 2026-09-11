@@ -82,6 +82,14 @@ def inspect(request: Request) -> JSONResponse | None:
             security.end_session(request)      # suspended or gone: forget them
             return _refuse(401, "Sign in required.")
 
+        # An administrator set this password and therefore knows it. Until the
+        # person replaces it, nothing else in the API answers — otherwise the
+        # "must change" is a suggestion the UI makes and a script ignores.
+        # /api/auth/* is already public-prefixed, so change-password, /me and
+        # logout stay reachable: the way out is never blocked.
+        if user.must_change_password:
+            return _refuse(403, "Password change required.")
+
         if path.startswith(ADMIN_PREFIX):
             if not is_global_admin(db, user):
                 audit(db, actor=user, action="admin.access", target_type="route",

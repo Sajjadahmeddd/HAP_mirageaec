@@ -23,6 +23,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-
 
 import { airsizer as airApi } from './api'
 import Launcher from './maecone/Launcher.jsx'
+import ChangePassword from './maecone/ChangePassword.jsx'
 import Login from './maecone/Login.jsx'
 import AdminShell from './maecone/admin/AdminShell.jsx'
 import { SESSION_EXPIRED, auth as authApi } from './maecone/api'
@@ -319,6 +320,18 @@ export default function App() {
       <div className="shell" style={{ alignItems: 'center', justifyContent: 'center' }}>
         <span className="muted">Loading…</span>
       </div>
+    )
+  }
+
+  // An administrator set this password, so the server refuses every call
+  // but /api/auth/*. There is nowhere else to send them until it is theirs.
+  if (session.must_change_password) {
+    return (
+      <ChangePassword
+        session={session}
+        onChanged={(who) => { setSession(who); navigate(homeFor(who), { replace: true }) }}
+        onSignOut={signOut}
+      />
     )
   }
 

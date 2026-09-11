@@ -277,6 +277,55 @@ def test_the_only_admin_cannot_delete_themselves(admin_client, db):
     assert db_user(db, ADMIN_EMAIL) is not None
 
 
+def test_one_admin_can_delete_another_but_not_the_last(admin_client, engineer_client, db):
+    """The chain the last-admin rule actually has to survive, over HTTP.
+
+    Promote a second admin, have them delete the first, then watch the two
+    separate guards stop them emptying the platform: the self-delete rule,
+    and the last-admin rule on revoking their own grant.
+    """
+    admin = db_user(db, ADMIN_EMAIL)
+    engineer = db_user(db, ENGINEER_EMAIL)
+
+    # 1. promote the engineer to Global Admin, over HTTP
+    promoted = admin_client.post(
+        f"{USERS}/{engineer.id}/roles", headers=headers(admin_client),
+        json={"role_id": str(db_role(db, "global_admin").id),
+              "scope_type": "platform", "scope_id": None})
+    assert promoted.status_code == 201, promoted.text
+    assert promoted.json()["is_global_admin"] is True
+
+    # the engineer's session picks the new role up without signing in again
+    assert engineer_client.get("/api/admin/whoami").status_code == 200
+
+    # 2. the new admin deletes the original — allowed, because two exist
+    deleted = engineer_client.delete(f"{USERS}/{admin.id}",
+                                     headers={CSRF_HEADER: engineer_client.csrf})
+    assert deleted.status_code == 200, deleted.text
+    assert db_user(db, ADMIN_EMAIL) is None
+
+    # 3. now they are the last one. Deleting themselves is refused...
+    refused = engineer_client.delete(f"{USERS}/{engineer.id}",
+                                     headers={CSRF_HEADER: engineer_client.csrf})
+    assert refused.status_code == 409
+    assert "your own account" in refused.json()["detail"]
+
+    # ...and so is giving up the role that makes them an admin
+    db.expire_all()
+    grant = db.scalar(select(UserRole).join(Role).where(
+        UserRole.user_id == engineer.id, Role.key == "global_admin"))
+    stripped = engineer_client.delete(
+        f"{USERS}/{engineer.id}/roles/{grant.id}",
+        headers={CSRF_HEADER: engineer_client.csrf})
+    assert stripped.status_code == 409
+    assert "last Global Admin" in stripped.json()["detail"]
+
+    # the platform still has exactly one administrator
+    from backend.identity.accounts import global_admin_holders
+    db.expire_all()
+    assert [u.email for u in global_admin_holders(db)] == [ENGINEER_EMAIL]
+
+
 def test_the_last_global_admin_grant_cannot_be_revoked_over_http(admin_client, db):
     admin = db_user(db, ADMIN_EMAIL)
     grant = db.scalar(select(UserRole).where(UserRole.user_id == admin.id))

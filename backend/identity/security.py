@@ -57,32 +57,17 @@ def needs_rehash(password_hash: str) -> bool:
         return False
 
 
-# Eight, not twelve. Length on its own buys very little here: an online guess
-# runs into per-IP rate limiting and an escalating lockout long before it runs
-# into entropy, and an offline guess runs into argon2id, which is deliberately
-# expensive per attempt. What length does not defend against is a *predictable*
-# password, so the list below does the work the extra four characters would
-# have pretended to.
+# The familiar composition policy: at least eight characters, with an
+# uppercase letter, a lowercase letter, a digit and a symbol.
+#
+# It checks the *shape* of a password rather than whether anyone would guess
+# it, so `Admin@123` passes. What stands between that and an intruder is the
+# rest of the sign-in path: per-IP rate limiting, an escalating lockout after
+# five failures, and argon2id, which is expensive per attempt by design. Those
+# are the defences that actually hold; this function is the house rule.
 MIN_PASSWORD_LENGTH = 8
 
-# Not a breach list — the values that appear near the top of every one, plus
-# the ones specific to this company that an outsider would try first. Trailing
-# digits and punctuation are stripped before the check, so `admin123`,
-# `mirage@2026` and `Passw0rd!` all reduce to something in here.
-OBVIOUS = frozenset({
-    "password", "password1", "password123", "passw0rd", "p@ssword", "pa55word",
-    "123456", "12345678", "123456789", "1234567890", "123456789012",
-    "qwerty", "qwertyuiop", "qwertyui", "1qaz2wsx", "zaq12wsx", "asdfghjk",
-    "letmein", "welcome", "welcome1", "admin", "administrator", "changeme",
-    "iloveyou", "abc123", "monkey", "dragon", "trustno1", "sunshine",
-    "princess", "football", "baseball", "superman", "batman", "shadow",
-    "master", "michael", "charlie", "jessica", "hunter", "ranger", "soccer",
-    "starwars", "computer", "internet", "whatever", "freedom", "secret",
-    "login", "test", "temp", "temporary", "default", "guest", "user",
-    # anyone targeting us starts here
-    "mirage", "mirageaec", "mirageaecindia", "maec", "maecone",
-    "hapext", "hapaudit", "airsizer", "rebadge", "engineering",
-})
+_SPECIAL = "a symbol"
 
 
 class WeakPasswordError(ValueError):
@@ -90,17 +75,32 @@ class WeakPasswordError(ValueError):
 
 
 def check_password_policy(password: str, *, email: str = "") -> None:
-    """Raise if this password would not be accepted. Server-side, always."""
+    """Raise if this password would not be accepted. Server-side, always.
+
+    `email` is accepted and ignored — every caller already passes it, and it
+    is where a rule about the address would go if one is ever wanted back.
+    """
     if not isinstance(password, str) or len(password) < MIN_PASSWORD_LENGTH:
         raise WeakPasswordError(
             f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
-    lowered = password.strip().lower()
-    if lowered in OBVIOUS or lowered.rstrip("0123456789!@#$%^&*") in OBVIOUS:
-        raise WeakPasswordError("That password is too common to be safe.")
-    if email:
-        local = email.split("@", 1)[0].lower()
-        if local and len(local) >= 4 and local in lowered:
-            raise WeakPasswordError("Password must not contain your email address.")
+
+    # A symbol is anything that is not a letter, a digit or a space — so
+    # punctuation a non-US keyboard produces counts, rather than only the
+    # dozen characters an ASCII list would have named.
+    missing = [
+        label for label, present in (
+            ("an uppercase letter", any(c.isupper() for c in password)),
+            ("a lowercase letter", any(c.islower() for c in password)),
+            ("a digit", any(c.isdigit() for c in password)),
+            (_SPECIAL, any(not c.isalnum() and not c.isspace() for c in password)),
+        ) if not present
+    ]
+    if missing:
+        if len(missing) > 1:
+            wanted = ", ".join(missing[:-1]) + " and " + missing[-1]
+        else:
+            wanted = missing[0]
+        raise WeakPasswordError(f"Password must contain {wanted}.")
 
 
 # --------------------------------------------------------------- sessions

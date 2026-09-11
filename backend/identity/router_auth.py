@@ -112,7 +112,15 @@ def login(request: Request, payload: dict, db: Session = Depends(get_db)):
     email = str(payload.get("email", "")).strip().lower()
     password = str(payload.get("password", ""))
 
-    user = _find_user(db, email) if email else None
+    # An address longer than the column can never match a stored user, so it
+    # is a failed login by definition — but it must be a tidy one. Cap it here
+    # so the lookup and the audit row it produces both stay inside their
+    # widths rather than reaching the database oversized.
+    if len(email) > 254 or len(password) > 1024:
+        user = None
+        email = email[:254]
+    else:
+        user = _find_user(db, email) if email else None
     moment = now()
 
     # Verify the hash even when there is no user or the account is locked:

@@ -268,6 +268,26 @@ def test_an_unknown_address_is_still_recorded(app_client, db):
     assert rows[0].actor_email == "stranger@example.com"
 
 
+def test_an_oversized_address_is_a_tidy_401_not_a_500(app_client, db):
+    """A 10,000-character address is longer than the column. It must be a
+    clean failed login, and the audit row it writes must fit — on Postgres
+    an untruncated value is a 500 and, worse, loses the record of the
+    attempt. Found in system testing; SQLite does not enforce the width, so
+    this asserts our own capping rather than leaning on the database."""
+    r = app_client.post("/api/auth/login",
+                        json={"email": "a" * 10000 + "@x.com", "password": "x"})
+    assert r.status_code == 401
+    assert r.json()["detail"] == GENERIC
+    row = audit_rows(db, "login.failed")[0]
+    assert row.actor_email is not None and len(row.actor_email) <= 254
+
+
+def test_an_oversized_password_is_refused_without_hashing(app_client):
+    r = app_client.post("/api/auth/login",
+                        json={"email": ADMIN_EMAIL, "password": "p" * 5000})
+    assert r.status_code == 401
+
+
 # --------------------------------------------------------------- the admin
 def test_the_admin_prefix_refuses_an_engineer_with_403(engineer_client, db):
     """The frontend is bypassed entirely: a direct call still gets a 403."""
@@ -351,40 +371,53 @@ def test_requires_auth_covers_the_docs_and_the_api_but_not_the_shell():
 
 
 # ------------------------------------------------------- password policy
-@pytest.mark.parametrize("weak", ["short", "password1234", "Mirageaec123", "123456789012"])
-def test_obvious_passwords_are_refused(weak):
-    with pytest.raises(security.WeakPasswordError):
-        security.check_password_policy(weak)
-
-
 def test_the_minimum_is_eight():
-    """Eight, because rate limiting and argon2id do the work length would
-    only pretend to. What length cannot catch is predictability, which is
-    why the common-password list matters more than the count."""
     assert security.MIN_PASSWORD_LENGTH == 8
-    security.check_password_policy("K9x!mQ2v")            # 8, unguessable
+    security.check_password_policy("K9x!mQ2v")            # exactly eight
     with pytest.raises(security.WeakPasswordError, match="at least 8"):
-        security.check_password_policy("K9x!mQ2")         # 7
+        security.check_password_policy("K9x!mQ2")         # seven
 
 
-@pytest.mark.parametrize("guessable", [
-    "admin123",       # trailing digits are stripped -> "admin"
-    "mirage@2026",    # ...and trailing punctuation too
-    "Passw0rd!",
-    "hapext123",      # our own product names are the first thing tried
-    "maec2026",
+@pytest.mark.parametrize("password,missing", [
+    ("alllower1!", "an uppercase letter"),
+    ("ALLUPPER1!", "a lowercase letter"),
+    ("NoDigits!!", "a digit"),
+    ("NoSymbol123", "a symbol"),
 ])
-def test_a_common_password_is_refused_however_long_it_is(guessable):
-    """Length is not the defence. These all clear eight characters and are
-    still the first things anyone targeting us would type."""
-    assert len(guessable) >= security.MIN_PASSWORD_LENGTH
-    with pytest.raises(security.WeakPasswordError, match="too common"):
-        security.check_password_policy(guessable)
+def test_each_character_class_is_required(password, missing):
+    """All four, and the message says which one is absent — an error that
+    does not tell you what to fix is just a closed door."""
+    assert len(password) >= security.MIN_PASSWORD_LENGTH
+    with pytest.raises(security.WeakPasswordError, match=missing):
+        security.check_password_policy(password)
 
 
-def test_a_password_must_not_contain_the_address(db):
-    with pytest.raises(security.WeakPasswordError):
-        security.check_password_policy("engineer-is-here-2026", email="engineer@mirageaec.com")
+def test_the_message_names_every_missing_class():
+    with pytest.raises(security.WeakPasswordError,
+                       match="an uppercase letter and a symbol"):
+        security.check_password_policy("eng12345")
+
+
+@pytest.mark.parametrize("password", [
+    "K9x!mQ2v",             # eight, mixed
+    "Zephyr-Oak-41",        # a hyphen is a symbol
+    "Correct H0rse!",       # a space is not a symbol, but the ! is
+    "Ünicöde-Pass1",        # non-ASCII letters still count as letters
+])
+def test_a_password_meeting_all_four_rules_is_accepted(password):
+    security.check_password_policy(password, email="admin@mirageaec.com")
+
+
+def test_composition_checks_shape_not_predictability():
+    """`Admin@123` satisfies every rule, and that is understood: what stops
+    it being guessed is the rate limit, the lockout and argon2id, not this
+    function. Pinned so the trade-off is deliberate rather than forgotten."""
+    security.check_password_policy("Admin@123", email="admin@mirageaec.com")
+
+
+def test_the_address_is_accepted_and_ignored():
+    """Callers still pass it; there is no rule about it any more."""
+    security.check_password_policy("Engineer@2026", email="engineer@mirageaec.com")
 
 
 def test_the_seed_refuses_a_weak_bootstrap_password(identity):

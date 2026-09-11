@@ -282,14 +282,21 @@ def audit(db: Session, *, action: str, result: str,
           source: str | None = "api", request: Request | None = None,
           before: dict[str, Any] | None = None, after: dict[str, Any] | None = None,
           commit: bool = True) -> AuditLog:
-    """Append one row. There is no counterpart that edits or removes one."""
+    """Append one row. There is no counterpart that edits or removes one.
+
+    Every string is capped to its column's width. The audit log must be the
+    one thing that never fails to write — a value from the wire being a few
+    bytes too long (a 10,000-character login address, say) must not turn a
+    clean 401 into a 500, still less lose the record of the attempt.
+    """
+    email = actor.email if actor else actor_email
     row = AuditLog(
         org_id=org_id or (actor.org_id if actor else None),
         actor_id=actor.id if actor else None,
-        actor_email=(actor.email if actor else actor_email),
-        action=action, target_type=target_type,
-        target_id=str(target_id) if target_id is not None else None,
-        source=source, result=result,
+        actor_email=(email[:254] if email else None),
+        action=action[:80], target_type=(target_type[:60] if target_type else None),
+        target_id=(str(target_id)[:120] if target_id is not None else None),
+        source=(source[:40] if source else None), result=result,
         ip=client_ip(request),
         user_agent=(request.headers.get("user-agent", "")[:400] if request else None),
         before=before, after=after,

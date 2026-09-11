@@ -149,6 +149,17 @@ export const admin = {
     return send('POST', `/api/admin/users/${id}/reset-password`, { password })
   },
 
+  // ---- screen 003: provisioning
+  provisioning() {
+    return fetch('/api/admin/provisioning').then(asJson)
+  },
+  createProvisioning(rule) {
+    return send('POST', '/api/admin/provisioning', rule)
+  },
+  patchProvisioning(id, patch) {
+    return send('PATCH', `/api/admin/provisioning/${id}`, patch)
+  },
+
   // ---- screen 005: bulk import
   importValidate(file) {
     const form = new FormData()

@@ -287,3 +287,43 @@ route — a dependency or a declared marker the guard can read — and
 `guard.inspect()` asks the route what it needs instead of pattern-matching
 paths. The guard keeps its job (one check, before routing, fail-closed); it
 stops keeping a second copy of the routing table.
+
+---
+
+## 10. Every control card must stay derived, not asserted
+
+**Status:** a habit to hold, with the moment it usually breaks written down.
+
+Two screens report the system's own state back to an administrator:
+
+* **004** — the active security controls strip;
+* **003** — Identity Provider, Provisioning Mode, Default Access Policy.
+
+Both are honest today because each card is **derived** rather than typed:
+
+| Card | Read from |
+|---|---|
+| Audit is append-only | `pg_trigger` — asked of the database |
+| Sign-in rate limited | `router_auth.limiter.enabled` |
+| Lockout after N failures | `router_auth.LOCK_AFTER` |
+| Minimum password length | `security.MIN_PASSWORD_LENGTH` |
+| Identity Provider | presence of `ENTRA_TENANT_ID` / `ENTRA_CLIENT_ID` |
+| Provisioning Mode | follows from the above |
+| Default Access Policy | the lowest-privilege role in the database |
+
+Two on 004 — CSRF, and the per-request account re-read — are asserted `True`
+with a file reference, because they are structural rather than configurable.
+That is honest now and is the crack to watch: a card that says `True` because
+someone believed it is indistinguishable, on screen, from one that says
+`True` because it asked.
+
+**The rule:**
+
+> When a control becomes configurable, its card becomes derived **in the same
+> change**. Never leave a card asserting what is now a setting.
+
+A security card that claims a protection the running system does not have is
+the most dangerous kind of fabrication in the panel, because it is the one an
+administrator relies on when deciding they are safe. The append-only card
+reporting **off** on SQLite, with the reason, is the shape all of them should
+keep.

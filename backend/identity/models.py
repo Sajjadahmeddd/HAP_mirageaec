@@ -275,7 +275,20 @@ class ToolRule(Base):
 
 # --------------------------------------------------- filled by Prompt 2
 class ProvisioningMap(Base):
+    """A directory group, and what arriving in it confers.
+
+    One row per group per organisation, enforced: two rows for the same group
+    would confer two roles and nothing would say which wins. "There should
+    only be one" guaranteed by nothing is how the audit_logs foreign key went
+    wrong, so it is a constraint.
+    """
     __tablename__ = "provisioning_map"
+    __table_args__ = (
+        UniqueConstraint("org_id", "directory_group",
+                         name="uq_provisioning_map_group"),
+        CheckConstraint("status IN ('active','disabled')",
+                        name="ck_provisioning_map_status"),
+    )
 
     id: Mapped[uuid.UUID] = _pk()
     org_id: Mapped[uuid.UUID] = mapped_column(

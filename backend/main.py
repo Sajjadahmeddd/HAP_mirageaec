@@ -29,8 +29,8 @@ from hap_converter import __version__
 
 from .deps import airsizer_config, hapext_config
 from .identity import (
-    admin_audit, admin_import, admin_roles, admin_tools, admin_users, guard,
-    router_admin, router_auth,
+    admin_audit, admin_import, admin_provisioning, admin_roles, admin_tools,
+    admin_users, guard, router_admin, router_auth,
 )
 from .routers import airsizer, hapext, rebadge
 
@@ -176,6 +176,7 @@ app.include_router(admin_tools.router)
 app.include_router(admin_users.router)
 app.include_router(admin_audit.router)
 app.include_router(admin_import.router)
+app.include_router(admin_provisioning.router)
 app.include_router(hapext.router)
 app.include_router(airsizer.router)
 app.include_router(rebadge.router)

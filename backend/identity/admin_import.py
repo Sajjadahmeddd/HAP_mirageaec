@@ -183,37 +183,6 @@ def read_records(upload: UploadFile) -> tuple[list[dict], list[str]]:
     return records, problems
 
 
-def import_scope(db: Session, actor: User) -> tuple[tuple[str, str | None], str | None]:
-    """Where an import places people: the scope the uploader administers.
-
-    A spreadsheet never confers platform scope. A Global Admin places people
-    across the organisation; someone who leads one application places them
-    in that application. Deriving it from the uploader rather than fixing it
-    at "organization" is what keeps the grant check meaningful — otherwise an
-    application lead is refused every row, including roles well below them,
-    for a reason that has nothing to do with the file.
-    """
-    from .permissions import is_global_admin
-    if is_global_admin(db, actor):
-        return ("organization", str(actor.org_id)), None
-
-    application_scopes = sorted({
-        g.scope_id for g in accounts.active_roles(db, actor)
-        if g.scope_type == "application" and g.scope_id})
-    if len(application_scopes) == 1:
-        return ("application", application_scopes[0]), None
-    if not application_scopes:
-        return ("organization", str(actor.org_id)), (
-            "You do not administer a scope to place people in.")
-    # More than one, and the file does not say which. Refusing is honest;
-    # guessing would place people somewhere nobody chose.
-    return ("organization", str(actor.org_id)), (
-        "You lead more than one application ("
-        + ", ".join(application_scopes)
-        + "), and this file does not say which these people belong to. "
-          "Import one application at a time.")
-
-
 # ------------------------------------------------------- the one resolution
 def plan(db: Session, actor: User, records: list[dict],
          file_problems: list[str] | None = None) -> ImportPlan:
@@ -248,7 +217,7 @@ def plan(db: Session, actor: User, records: list[dict],
                                sub.seats - accounts.seats_in_use(
                                    db, actor.org_id, app.id))
 
-    scope, scope_problem = import_scope(db, actor)
+    scope, scope_problem = accounts.placement_scope(db, actor)
     if scope_problem:
         result.file_problems.append(scope_problem)
         result.columns_ok = False

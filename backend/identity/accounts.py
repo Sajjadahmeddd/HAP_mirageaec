@@ -302,6 +302,40 @@ def update_user(db: Session, *, actor: User, target: User,
     db.commit()
 
 
+def placement_scope(db: Session, actor: User) -> tuple[tuple[str, str | None], str | None]:
+    """Where this person may place others: the scope they administer.
+
+    A CSV import and a directory-group mapping both confer a role on someone
+    who does not exist yet, and both need the same answer — so they ask the
+    same function rather than keeping a copy each that agrees today.
+
+    Neither ever confers platform scope. A Global Admin places people across
+    the organisation; someone who leads one application places them in that
+    application. Deriving it from the actor rather than fixing it at
+    "organization" is what keeps the grant check meaningful — otherwise an
+    application lead is refused every row, including roles well below them,
+    for a reason that has nothing to do with what they asked for.
+    """
+    if is_global_admin(db, actor):
+        return ("organization", str(actor.org_id)), None
+
+    application_scopes = sorted({
+        g.scope_id for g in active_roles(db, actor)
+        if g.scope_type == "application" and g.scope_id})
+    if len(application_scopes) == 1:
+        return ("application", application_scopes[0]), None
+    if not application_scopes:
+        return ("organization", str(actor.org_id)), (
+            "You do not administer a scope to place people in.")
+    # More than one, and the file does not say which. Refusing is honest;
+    # guessing would place people somewhere nobody chose.
+    return ("organization", str(actor.org_id)), (
+        "You lead more than one application ("
+        + ", ".join(application_scopes)
+        + "), so which of them these people belong to is ambiguous. "
+          "Work one application at a time.")
+
+
 # -------------------------------------------------------------- the seats
 def seats_in_use(db: Session, org_id: uuid.UUID, application_id: uuid.UUID) -> int:
     """How many people in this organisation hold a seat on this application."""

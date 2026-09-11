@@ -145,3 +145,87 @@ client-supplied and therefore spoofable.
 **To verify after deploying:** sign in, then read `audit_logs.ip`. If it shows
 your real public address, forwarding works and only the limiter needs its key
 changing. If it shows a `10.x` address, both need it.
+
+---
+
+## 7. Screens must not call `can()` per cell — a rule, not a fix
+
+**Status:** a constraint to hold to, deliberately not a code change.
+
+`can()` resolves **one permission per call** and makes **8–9 queries** doing
+it. Measured:
+
+| | queries |
+|---|---|
+| one `can()` call, cold session | 9 |
+| one `can()` call, warm session | 8 |
+| a 16-cell module × action matrix, one user | **116** |
+| the same for 50 users | **~5,800** |
+
+There is no bulk API, and **none is being built yet**, on purpose. The
+expensive path is not on any hot surface: the admin screens render from a
+bulk read of `role_permissions`, not from `can()` per cell, so the N+1 this
+invites is not currently firing anywhere. Building a batch API now would be
+optimising something nothing calls at scale.
+
+**The rule instead:**
+
+> Screens bulk-read permissions for rendering. `can()` is for enforcement —
+> one call per action actually being authorised, not one per thing displayed.
+
+`require_permission(key)` on an endpoint is correct and costs one `can()`.
+A grid that calls `can()` once per toggle is not, and is the thing this note
+exists to prevent.
+
+**When to build the bulk API:** the first screen that genuinely needs a
+person's whole effective permission set — most likely a per-user override
+view, or the product navigation honouring `hidden` (see #3). At that point
+the shape is "give me this user's effective set for this application in one
+pass", resolved in memory from three reads, exactly as `_apps_payload` now
+does for entitlements.
+
+**Already fixed, for contrast, because these *were* on the hot path:**
+
+* `GET /api/auth/me` went from **22 queries to 8** — it called `entitled()`
+  per application, and each re-read the application, its subscription and the
+  licence. Every page load hits this endpoint.
+* Every guarded request now reads the user **once** instead of twice. The
+  guard parks its session and the resolved user on the request; the route
+  dependency reads them back. Sharing the session alone was not enough —
+  SQLAlchemy's identity map holds weak references, so the guard's local going
+  out of scope let the entry be collected and the route re-queried. The
+  instance has to be held deliberately.
+
+---
+
+## 8. The third interstitial state should be an enum, not a third boolean
+
+**Status:** decided in advance. Do not act on it yet.
+
+The guard now enforces "authenticated, but not yet allowed through" states,
+which is the right place for them. There are already **two**, by two different
+mechanisms:
+
+| State | Stored as | Guard behaviour |
+|---|---|---|
+| suspended | `users.status = 'suspended'` | 401, session cleared |
+| password must change | `users.must_change_password` bool | 403 on everything but `/api/auth/*` |
+
+Two mechanisms for one class of state is tolerable. Three is not, and the
+third is foreseeable: **MFA enrolment** is the likely one given enterprise
+clients, and "has not accepted updated terms" is the other candidate.
+
+**The decision, made now so it happens at the right moment:**
+
+> When a third interstitial state arrives, fold `must_change_password`,
+> suspension and the new state into a single `account_state` the guard
+> checks. **Do not add a third boolean.**
+
+Deliberately not done today: it works, MFA is not on the table, and a
+speculative refactor is its own kind of premature. The trigger is written
+down so the refactor happens one state early rather than one state late —
+the point at which it stops being a rename and starts being archaeology.
+
+**Note for Screen 004:** an audit row with nobody to name now stores the
+sentinel `(anonymous)` (a login attempt that supplied no address at all).
+Render that as `—` in the ACTOR column rather than showing the sentinel.

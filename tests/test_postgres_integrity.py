@@ -116,7 +116,8 @@ def test_the_append_only_trigger_exists_and_refuses(session):
     assert session.scalar(text(
         "select count(*) from pg_trigger where tgname='audit_logs_append_only'")) == 1
 
-    session.add(AuditLog(action="probe", result="success"))
+    session.add(AuditLog(action="probe", result="success",
+                         actor_email="probe@mirageaec.com"))
     session.commit()
 
     for statement in ("UPDATE audit_logs SET action='tampered'",
@@ -170,6 +171,36 @@ def test_an_oversized_login_address_does_not_overflow_the_column(pg):
     r = client.post("/api/auth/login",
                     json={"email": "a" * 10000 + "@x.com", "password": "x"})
     assert r.status_code == 401
+
+
+def test_actor_email_cannot_be_null(session):
+    """`actor_id` has no foreign key, so this is the only identity a row is
+    guaranteed to keep. The guarantee is a constraint, not a convention —
+    which is the whole lesson of the foreign key that had to be removed."""
+    from sqlalchemy.exc import IntegrityError
+
+    from backend.identity.models import AuditLog
+
+    session.add(AuditLog(action="nameless", result="success"))
+    with pytest.raises(IntegrityError, match="actor_email"):
+        session.commit()
+    session.rollback()
+
+
+def test_an_anonymous_login_attempt_still_names_something(session):
+    """A login POST with no address at all: nobody to name, but the row must
+    still exist and still satisfy the constraint."""
+    from backend.identity.models import AuditLog
+    from backend.identity.permissions import ANONYMOUS_ACTOR, audit
+
+    # a unique action: the scratch database is module-scoped, so an earlier
+    # test's login.failed rows are still here
+    audit(session, action="login.failed.anon-probe", result="warning",
+          actor_email=None)
+    row = session.scalars(select(AuditLog).where(
+        AuditLog.action == "login.failed.anon-probe")).one()
+    assert row.actor_email == ANONYMOUS_ACTOR
+    assert "@" not in ANONYMOUS_ACTOR      # cannot collide with a real address
 
 
 def test_every_string_column_survives_an_oversized_audit_write(session):

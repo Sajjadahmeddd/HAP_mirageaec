@@ -22,7 +22,9 @@ from sqlalchemy.orm import Session
 
 from . import accounts, security
 from .db import get_db
-from .models import Application, Organization, User
+from .models import (
+    Application, Organization, Subscription, User, UserLicense,
+)
 from .permissions import (
     active_roles, audit, current_user, entitled, is_global_admin, now,
 )
@@ -67,14 +69,35 @@ def _apps_payload(db: Session, user: User | None) -> list[dict]:
 
     Computed here from subscriptions and seats, never from the client. The
     launcher renders exactly this list.
+
+    Three queries, whatever the number of applications. Calling `entitled()`
+    once per app read the application, its subscription and the licence each
+    time — twenty-two queries for eight apps, on the endpoint every page load
+    hits. The three reads below answer the same question: what exists, what
+    this organisation subscribes to, and which seats this person holds.
     """
-    out = []
-    for app in db.scalars(select(Application).order_by(Application.name)).all():
-        item = {"key": app.key, "name": app.name, "description": app.description,
-                "status": app.status, "base_url": app.base_url}
-        if user is not None:
-            item["entitled"] = entitled(db, user, app.key)
-        out.append(item)
+    apps = db.scalars(select(Application).order_by(Application.name)).all()
+    out = [{"key": a.key, "name": a.name, "description": a.description,
+            "status": a.status, "base_url": a.base_url} for a in apps]
+    if user is None:
+        return out
+
+    moment = now()
+    subscriptions = {
+        s.application_id: s for s in db.scalars(select(Subscription).where(
+            Subscription.org_id == user.org_id)).all()
+    }
+    seats = {
+        row for row in db.scalars(select(UserLicense.application_id).where(
+            UserLicense.user_id == user.id)).all()
+    }
+
+    for app, item in zip(apps, out):
+        sub = subscriptions.get(app.id)
+        in_date = (sub is not None
+                   and _as_utc(sub.valid_from) <= moment
+                   and (sub.valid_to is None or _as_utc(sub.valid_to) >= moment))
+        item["entitled"] = bool(in_date and app.id in seats)
     return out
 
 

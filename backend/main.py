@@ -116,9 +116,14 @@ async def gate(request: Request, call_next):
     a worker thread rather than on the event loop.
     """
     refusal = await run_in_threadpool(guard.inspect, request)
-    if refusal is not None:
-        return refusal
-    return await call_next(request)
+    try:
+        if refusal is not None:
+            return refusal
+        return await call_next(request)
+    finally:
+        # the guard's session is the request's session; it lives exactly as
+        # long as the request does
+        await run_in_threadpool(guard.release, request)
 
 
 # Signed-cookie sessions: no server-side store, so a Render restart or a

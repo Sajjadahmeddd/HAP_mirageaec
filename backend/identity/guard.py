@@ -76,8 +76,15 @@ def inspect(request: Request) -> JSONResponse | None:
         return _refuse(401, "Sign in required.")
 
     db = session_factory()()
+    request.state.identity_db = db          # released in release(), below
     try:
         user = load_user(db, user_id)
+        # Held deliberately, not just left in the session. SQLAlchemy's
+        # identity map keeps weak references, so once this function returns
+        # its local goes out of scope, the entry is collected and the route
+        # re-queries the same row. Keeping the object on the request is what
+        # makes sharing the session actually save the round trip.
+        request.state.identity_user = user
         if user is None:
             security.end_session(request)      # suspended or gone: forget them
             return _refuse(401, "Sign in required.")
@@ -91,7 +98,10 @@ def inspect(request: Request) -> JSONResponse | None:
             return _refuse(403, "Password change required.")
 
         if path.startswith(ADMIN_PREFIX):
-            if not is_global_admin(db, user):
+            # resolved once and remembered: require_global_admin reads this
+            # back rather than asking the same question a second time
+            request.state.is_global_admin = is_global_admin(db, user)
+            if not request.state.is_global_admin:
                 audit(db, actor=user, action="admin.access", target_type="route",
                       target_id=path, source="api", result="blocked", request=request)
                 return _refuse(403, "Global Admin only.")
@@ -109,5 +119,16 @@ def inspect(request: Request) -> JSONResponse | None:
     except Exception:
         # Whatever went wrong, the answer is no.
         return _refuse(401, "Sign in required.")
-    finally:
+
+
+def release(request: Request) -> None:
+    """Close the session `inspect` opened, once the response is made.
+
+    Kept out of `inspect` so the route can share the same session: closing it
+    there would have meant every guarded request opening a second one.
+    """
+    db = getattr(request.state, "identity_db", None)
+    request.state.identity_user = None
+    if db is not None:
+        request.state.identity_db = None
         db.close()

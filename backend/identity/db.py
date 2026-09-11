@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 
+from fastapi import Request
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -42,8 +43,23 @@ def session_factory() -> sessionmaker[Session]:
     return _factory
 
 
-def get_db() -> Generator[Session, None, None]:
-    """FastAPI dependency: one session per request, always closed."""
+def get_db(request: Request) -> Generator[Session, None, None]:
+    """One session per request.
+
+    The guard has already opened one to read the user and decide whether this
+    request may proceed, and it parks it on `request.state`. Reusing it here
+    means the route sees the same identity map, so re-reading the same user is
+    free rather than a second round trip — and the whole request becomes one
+    unit of work rather than two overlapping ones.
+
+    When there is no guarded session — the public /api/auth/* paths — this
+    opens and closes its own, as before.
+    """
+    existing = getattr(request.state, "identity_db", None)
+    if existing is not None:
+        yield existing          # the middleware owns it; do not close it here
+        return
+
     db = session_factory()()
     try:
         yield db

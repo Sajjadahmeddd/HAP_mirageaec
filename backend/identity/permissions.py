@@ -32,6 +32,16 @@ from .models import (
 
 GLOBAL_ADMIN = "global_admin"
 
+# What an audit row records when there is genuinely nobody to name: a login
+# attempt that supplied no address at all. Every other path has an actor.
+#
+# A sentinel rather than NULL because `actor_id` no longer carries a foreign
+# key — `actor_email` is the only durable identity on a row, and "should
+# always be populated" enforced by nothing is the exact shape of the bug that
+# removal fixed. The column is NOT NULL; this is what makes that possible.
+# It cannot collide with a real address: it has no "@".
+ANONYMOUS_ACTOR = "(anonymous)"
+
 # Higher number: more specific. Most specific wins.
 SPECIFICITY = {"platform": 1, "organization": 2, "application": 3, "project": 4}
 
@@ -234,7 +244,12 @@ def load_user(db: Session, user_id: str | None) -> User | None:
 
 
 def current_user(request: Request, db: Session = Depends(get_db)) -> User | None:
-    user = load_user(db, security.session_user_id(request))
+    # The guard resolved this already for every guarded path and kept the
+    # instance alive on the request. Reading it back is the whole point of
+    # sharing the session; asking again would be the same row, twice.
+    user = getattr(request.state, "identity_user", None)
+    if user is None:
+        user = load_user(db, security.session_user_id(request))
     if user is not None:
         # The version in the cookie is what the session was issued against.
         # Roles are re-read on every check anyway, so this only keeps the
@@ -252,7 +267,14 @@ def require_user(user: User | None = Depends(current_user)) -> User:
 
 def require_global_admin(request: Request, user: User = Depends(require_user),
                          db: Session = Depends(get_db)) -> User:
-    if not is_global_admin(db, user):
+    # The guard already answered this for anything under /api/admin/ and left
+    # the answer on the request. Asking again would re-read the roles for no
+    # new information — this dependency is the second lock on the same door,
+    # not a second question.
+    decided = getattr(request.state, "is_global_admin", None)
+    if decided is None:
+        decided = is_global_admin(db, user)
+    if not decided:
         audit(db, actor=user, action="admin.access", target_type="route",
               target_id=request.url.path, source="api", result="blocked",
               request=request)
@@ -314,7 +336,7 @@ def audit(db: Session, *, action: str, result: str,
     bytes too long (a 10,000-character login address, say) must not turn a
     clean 401 into a 500, still less lose the record of the attempt.
     """
-    email = actor.email if actor else actor_email
+    email = (actor.email if actor else actor_email) or ANONYMOUS_ACTOR
     row = AuditLog(
         org_id=org_id or (actor.org_id if actor else None),
         # Which product this concerns, where that is meaningful. Signing in is
@@ -322,7 +344,7 @@ def audit(db: Session, *, action: str, result: str,
         # and a Business Admin may only read their own application's events.
         application_id=application_id,
         actor_id=actor.id if actor else None,
-        actor_email=(email[:254] if email else None),
+        actor_email=email[:254],
         action=action[:80], target_type=(target_type[:60] if target_type else None),
         target_id=(str(target_id)[:120] if target_id is not None else None),
         source=(source[:40] if source else None), result=result,

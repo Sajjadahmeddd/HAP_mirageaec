@@ -336,7 +336,10 @@ class AuditLog(Base):
     id: Mapped[uuid.UUID] = _pk()
     org_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, index=True)
     actor_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, index=True)
-    actor_email: Mapped[str | None] = mapped_column(String(254))
+    # NOT NULL: with no foreign key on actor_id, this is the only identity a
+    # row is guaranteed to keep. See ANONYMOUS_ACTOR in permissions.py for the
+    # one case with nobody to name.
+    actor_email: Mapped[str] = mapped_column(String(254), nullable=False)
     action: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     # Which product the event belongs to, where that is meaningful. Signing in
     # is not about one application, so this stays NULL for those; a role grant

@@ -326,18 +326,22 @@ class AuditLog(Base):
         Index("ix_audit_logs_org_created", "org_id", created_at_desc := text("created_at DESC")),
     )
 
+    # These three carry NO foreign key, deliberately. A SET NULL is an UPDATE,
+    # and the append-only trigger refuses UPDATEs — so with them in place,
+    # deleting a user, an organisation or an application became impossible as
+    # soon as it appeared in one audit row. Referential actions and an
+    # immutable log cannot both be right, and the log wins: it is the record
+    # of what happened, and what happened does not change because an account
+    # was later removed. `actor_email` is copied in for exactly this reason.
     id: Mapped[uuid.UUID] = _pk()
-    org_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("organizations.id", ondelete="SET NULL"), index=True)
-    actor_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    org_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, index=True)
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, index=True)
     actor_email: Mapped[str | None] = mapped_column(String(254))
     action: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     # Which product the event belongs to, where that is meaningful. Signing in
     # is not about one application, so this stays NULL for those; a role grant
     # or a tool rule is, and a Business Admin may only read their own.
-    application_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("applications.id", ondelete="SET NULL"))
+    application_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     target_type: Mapped[str | None] = mapped_column(String(60))
     target_id: Mapped[str | None] = mapped_column(String(120))
     source: Mapped[str | None] = mapped_column(String(40))

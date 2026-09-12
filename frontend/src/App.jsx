@@ -1,33 +1,25 @@
-// The MAEC shell.
+// The Engineering Tools shell.
 //
-// Three areas live under one address bar, and this file routes between them:
-//
-//   /            the sign-in screen, until we know who you are
-//   /home        the MAEC One launcher — the products you hold a seat on
-//   /admin/*     Global Admin (MAEC One Core)
-//   everything   Engineering Tools, whose own page-state machine is
-//   else         unchanged and simply mounted under these routes
+// This file used to route between three areas: the sign-in screen, the MAEC
+// One launcher, and Global Admin — with Engineering Tools mounted underneath
+// them. The first three were MAEC One Core's and have moved to their own
+// service. What is left is the product, now mounted at the root.
 //
 // All Engineering Tools session state lives here and is handed down as
 // `ctx`, the same shape the desktop pages received. Nothing is persisted
 // server-side: a sizing run happens in one sitting and the exported workbook
-// is the artifact.
+// is the artifact. That part is untouched.
 //
-// Where you land after signing in — and which tiles are openable — is
-// decided by the server, not here. Every one of these routes is a
-// convenience; the API refuses what this person may not do regardless of
-// what the browser renders.
+// WHAT IS MISSING, deliberately and temporarily: there is no sign-in, and
+// nothing here asks who the user is. The API does not ask either — see the
+// block in backend/main.py. When the OIDC client lands, this file regains a
+// /auth/callback route and the titlebar regains its two controls; until then
+// it renders the tools to whoever opens the page.
 
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 
 import { airsizer as airApi } from './api'
-import Launcher from './maecone/Launcher.jsx'
-import ChangePassword from './maecone/ChangePassword.jsx'
-import Login from './maecone/Login.jsx'
-import AdminShell from './maecone/admin/AdminShell.jsx'
-import { SESSION_EXPIRED, auth as authApi } from './maecone/api'
-import { INTERNAL } from './maecone/MaecOne.jsx'
 import { AIRSIZER, HAPEXT, save as saveRecent } from './recents'
 import { ENTRY_POINTS, HOME_OF, TAB_OF, pageOf, pathOf } from './routes'
 
@@ -65,15 +57,8 @@ const PAGES = {
   'air-review': AirReview,
 }
 
-/** Where a signed-in person belongs when they have not asked for anywhere. */
-const homeFor = (session) => (session?.is_global_admin ? '/admin' : '/home')
-
-const entitledTo = (session, key) =>
-  !!(session?.apps || []).find((app) => app.key === key && app.entitled)
-
-
 // ------------------------------------------------------- Engineering Tools
-function EngineeringTools({ ctx, session, onSignOut, airConfig, airError }) {
+function EngineeringTools({ ctx, airConfig, airError }) {
   const location = useLocation()
   const navigate = useNavigate()
   const page = pageOf(location.pathname)
@@ -88,7 +73,7 @@ function EngineeringTools({ ctx, session, onSignOut, airConfig, airError }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  if (!page) return <Navigate to={homeFor(session)} replace />
+  if (!page) return <Navigate to={pathOf(HOME_OF['HAPExt'])} replace />
 
   const tab = TAB_OF[page] || 'HAPExt'
   const Page = PAGES[page] || HapHome
@@ -96,21 +81,15 @@ function EngineeringTools({ ctx, session, onSignOut, airConfig, airError }) {
   return (
     <div className="shell">
       <div className="titlebar">
-        <button
-          className="titlebar-home"
-          title="Back to MAEC One"
-          onClick={() => navigate('/home')}
-        >
-          <img className="titlebar-logo" src="/maec-logo.png" alt="MAEC" />
-        </button>
+        {/* Three controls stood here and all three acted on a session: the
+            logo returned to the MAEC One launcher, "Global Admin" opened the
+            admin shell, and "Sign out" ended the session. All three are
+            Core's now, and a button that cannot do what it says is worse
+            than no button — so the logo is a plain mark until the OIDC
+            client gives it somewhere real to go. */}
+        <img className="titlebar-logo" src="/maec-logo.png" alt="MAEC" />
         <span className="version">v{VERSION}</span>
         <span className="grow" />
-        {session?.is_global_admin && (
-          <button className="btn-ghost" onClick={() => navigate('/admin')}>
-            Global Admin
-          </button>
-        )}
-        <button className="btn-ghost" onClick={onSignOut}>Sign out</button>
       </div>
 
       <div className="tabbar">
@@ -146,10 +125,6 @@ function EngineeringTools({ ctx, session, onSignOut, airConfig, airError }) {
 // ------------------------------------------------------------------- shell
 export default function App() {
   const navigate = useNavigate()
-  const location = useLocation()
-
-  // null while we ask the server; then the payload from GET /api/auth/me
-  const [session, setSession] = useState(null)
 
   // ---- HAPExt session
   const [pdf, setPdf] = useState(null)          // {file, name, pages, size}
@@ -185,48 +160,18 @@ export default function App() {
     navigate(pathOf(name))
   }, [navigate])
 
-  // Ask who we are first; only then load anything the guard protects.
+  // Asked unconditionally now. It used to wait for GET /api/auth/me and
+  // then for a seat on Engineering Tools, so that an unentitled person never
+  // made a call the guard would refuse. There is no seat to check and no
+  // guard to refuse it.
   useEffect(() => {
-    authApi.me()
-      .then(setSession)
-      .catch(() => setSession({ authenticated: false, apps: [] }))
-  }, [])
-
-  useEffect(() => {
-    if (!session?.authenticated) return
-    if (!entitledTo(session, INTERNAL)) return   // no seat: do not even ask
     airApi.config()
       .then((cfg) => {
         setAirConfig(cfg)
         setVisibleColumns(cfg.result_columns.filter((c) => c.default).map((c) => c.key))
       })
       .catch((err) => setAirError(err.message))
-  }, [session?.authenticated])
-
-  // A lapsed session anywhere in the app drops straight back to the login
-  useEffect(() => {
-    const expired = () => {
-      setSession({ authenticated: false, apps: [] })
-      navigate('/', { replace: true })
-    }
-    window.addEventListener(SESSION_EXPIRED, expired)
-    return () => window.removeEventListener(SESSION_EXPIRED, expired)
-  }, [navigate])
-
-  const signOut = async () => {
-    try { await authApi.logout() } catch { /* the cookie goes either way */ }
-    setSession({ authenticated: false, apps: [] })
-    setConversion(null); setDetails(null); setLogo(null); setChangeResult(null)
-    setSpaces([]); setSizingInputs({}); setResults({})
-    setAirConfig(null)
-    setWarm(false)
-    navigate('/', { replace: true })
-  }
-
-  const signedIn = (who) => {
-    setSession(who)
-    navigate(homeFor(who), { replace: true })
-  }
+  }, [])
 
   const recordSizing = useCallback((row, diffuser, values, result) => {
     setSizingInputs((prev) => ({ ...prev, [row]: { diffuser, values } }))
@@ -315,69 +260,18 @@ export default function App() {
     bumpRecents: () => setRecentsKey((n) => n + 1),
   }
 
-  if (session === null) {
-    return (
-      <div className="shell" style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <span className="muted">Loading…</span>
-      </div>
-    )
-  }
-
-  // An administrator set this password, so the server refuses every call
-  // but /api/auth/*. There is nowhere else to send them until it is theirs.
-  if (session.must_change_password) {
-    return (
-      <ChangePassword
-        session={session}
-        onChanged={(who) => { setSession(who); navigate(homeFor(who), { replace: true }) }}
-        onSignOut={signOut}
-      />
-    )
-  }
-
-  if (!session.authenticated) {
-    // The sign-in screen is the only thing at any address until we know who
-    // you are — a deep link is answered by the login form, and the API would
-    // refuse the request behind it in any case.
-    return (
-      <>
-        {location.pathname !== '/' && <Navigate to="/" replace />}
-        <Login apps={session.apps} onSignedIn={signedIn} />
-      </>
-    )
-  }
-
+  // Three gates stood here — a loading state while GET /api/auth/me
+  // answered, the forced password change, and the sign-in screen — followed
+  // by routes for the launcher and Global Admin. All of it was Core's.
+  //
+  // Engineering Tools is now mounted at the root with nothing in front of
+  // it. The route table is a single entry on purpose: adding a redirect to
+  // Core here would look like authentication without being any, and this
+  // branch is clearer being visibly open than subtly so.
   return (
     <Routes>
-      <Route path="/" element={<Navigate to={homeFor(session)} replace />} />
-
-      <Route path="/home" element={
-        <Launcher
-          session={session}
-          onOpen={() => setPage(HOME_OF['HAPExt'])}
-          onAdmin={() => navigate('/admin')}
-          onSignOut={signOut}
-        />
-      } />
-
-      {/* Convenience only: require_global_admin refuses /api/admin/* to
-          anyone else, so a non-admin who types this URL gets an empty shell
-          and 403s from every call it makes. */}
-      <Route path="/admin/*" element={
-        session.is_global_admin
-          ? <AdminShell session={session} onSignOut={signOut} />
-          : <Navigate to="/home" replace />
-      } />
-
-      {/* Engineering Tools. Without a seat the product API answers 403, so
-          there is nothing to show — go back to the launcher. */}
       <Route path="*" element={
-        entitledTo(session, INTERNAL)
-          ? <EngineeringTools
-              ctx={ctx} session={session} onSignOut={signOut}
-              airConfig={airConfig} airError={airError}
-            />
-          : <Navigate to="/home" replace />
+        <EngineeringTools ctx={ctx} airConfig={airConfig} airError={airError} />
       } />
     </Routes>
   )

@@ -44,10 +44,15 @@ SCHEDULE_ROWS = [
 
 
 @pytest.fixture
-def client(engineer_client):
-    """Signed in as an ordinary engineer, so these tests exercise the
-    routers rather than the gate — and prove a normal seat is enough."""
-    return engineer_client
+def client(app_client):
+    """These tests exercise the routers, not the gate.
+
+    It used to sign in as an ordinary engineer to get past the gate and, in
+    doing so, prove that a normal seat was enough. There is no gate and no
+    seat: the routers answer directly. What these tests check — that each
+    endpoint wraps its engine function correctly — is unchanged either way.
+    """
+    return app_client
 
 
 @pytest.fixture
@@ -78,7 +83,12 @@ def test_health_reports_both_modules_and_the_catalogs(client):
     assert body["status"] == "ok"
     assert body["modules"] == ["HAPExt", "AirSizer Pro"]
     assert body["diffusers"] == 5
-    assert body["auth"] == "on"   # signing in is always required
+    # Was "on", and was true. Signing in is MAEC One Core's now and nothing
+    # here has replaced it, so the endpoint reports "none" — asserted rather
+    # than deleted, because a health check quietly dropping a field is how a
+    # service ends up claiming a protection it lost. Changes back with the
+    # OIDC client; see tests/test_backend_auth.py.
+    assert body["auth"] == "none"
 
 
 # ------------------------------------------------------------------- HAPExt

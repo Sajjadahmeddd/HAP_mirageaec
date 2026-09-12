@@ -13,54 +13,37 @@ from pathlib import Path
 
 from contextlib import asynccontextmanager
 
-# Identity first: importing its config loads .env before anything below
-# reads the environment. A real environment variable always wins over the
-# file, so on Render — which has no .env — this changes nothing.
-from .identity import config as identity_config  # noqa: I001  (must be first)
-
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from slowapi.errors import RateLimitExceeded
-from starlette.concurrency import run_in_threadpool
-from starlette.middleware.sessions import SessionMiddleware
 
 from hap_converter import __version__
 
 from .deps import airsizer_config, hapext_config
-from .identity import (
-    admin_audit, admin_import, admin_provisioning, admin_roles, admin_tools,
-    admin_users, guard, router_admin, router_auth,
-)
 from .routers import airsizer, hapext, rebadge
 
 FRONTEND_DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Signing in is always required. Say what the service is running on,
-    without echoing anything secret."""
-    where = "on Render" if identity_config.on_render() else "locally"
-    print(f"MAEC: auth ON — per-user sign-in against the identity database ({where}).")
-    if not os.environ.get("DATABASE_URL", "").strip():
-        print("MAEC: DATABASE_URL is not set — sign-in cannot work until it is.")
-    if not identity_config.session_secret_configured():
-        print("MAEC: SESSION_SECRET unset — everyone is signed out on restart.")
+    """Say what this process actually is, which at the moment is unguarded.
+
+    It printed "auth ON" for as long as the identity stack was in this
+    process. That stack is MAEC One Core's now, in its own repository and
+    its own service, and nothing has taken over from it here — so the honest
+    line is the opposite one, printed on every boot, where a quiet start
+    would be worse.
+    """
+    where = "on Render" if os.environ.get("RENDER") else "locally"
+    print(f"Engineering Tools starting {where}.")
+    print("  !! NO AUTHENTICATION. Every API route answers anybody who can")
+    print("  !! reach this address. Sign-in moved to MAEC One Core and the")
+    print("  !! OIDC client that replaces it is not built yet. Development")
+    print("  !! only — do not deploy this build.")
     yield
 
 
 app = FastAPI(title="MAEC", version=__version__, lifespan=lifespan)
-
-# Login is rate limited per IP (see identity/router_auth.py). The reply on
-# hitting it says nothing about whether the address exists.
-app.state.limiter = router_auth.limiter
-
-
-@app.exception_handler(RateLimitExceeded)
-async def _too_many(request: Request, exc: RateLimitExceeded):
-    return JSONResponse({"detail": "Too many attempts. Try again in a minute."},
-                        status_code=429)
-
 
 # What the browser is allowed to do with a page we served. This is not an
 # access rule — it gates nothing and no signed-in user can tell it is here.
@@ -100,47 +83,43 @@ SECURITY_HEADERS = {
 }
 
 
-# ORDER MATTERS. Starlette runs the *last* middleware added as the outermost
-# one, so the guard is registered first and SessionMiddleware second — that
-# way the session cookie is decoded before the guard tries to read it.
-# Registered the other way round, request.session does not exist yet and
-# every request looks signed out.
-@app.middleware("http")
-async def gate(request: Request, call_next):
-    """Refuse API calls from anyone who may not make them.
-
-    The SPA itself is always served — it has to load in order to show a login
-    screen — so only /api/* is gated, minus the login exchange and health.
-    The rules live in identity/guard.py: a live account, Global Admin for
-    /api/admin/*, the CSRF header for admin mutations, and a seat on the
-    product for each product's routes. It reads the database, so it runs in
-    a worker thread rather than on the event loop.
-    """
-    refusal = await run_in_threadpool(guard.inspect, request)
-    try:
-        if refusal is not None:
-            return refusal
-        return await call_next(request)
-    finally:
-        # the guard's session is the request's session; it lives exactly as
-        # long as the request does
-        await run_in_threadpool(guard.release, request)
-
-
-# Signed-cookie sessions: no server-side store, so a Render restart or a
-# second instance changes nothing. https_only is off in local development
-# because there is no TLS on 127.0.0.1.
-# No `domain` attribute, deliberately: the cookie is host-only. The company
-# site shares the registrable domain (mirageaec.com), and a cookie scoped to
-# .mirageaec.com would put our session inside its reach.
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=identity_config.session_secret(),
-    session_cookie=identity_config.SESSION_COOKIE,
-    max_age=identity_config.SESSION_MAX_AGE,
-    same_site="lax",
-    https_only=identity_config.on_render(),
-)
+# ==========================================================================
+# THE GATE WAS HERE. NOTHING HAS REPLACED IT YET.
+# ==========================================================================
+#
+# Two middlewares stood at this point: a guard that refused every /api/*
+# call from anyone without a live account — Global Admin for /api/admin/*,
+# the CSRF header for admin mutations, a seat on the product for each
+# product's routes — and the signed-cookie session it read that account
+# from. Both belonged to the identity stack, which is MAEC One Core now, in
+# its own repository.
+#
+# Removing them was right: two copies of one permission engine in two
+# repositories drift from the day they exist. It also leaves this service
+# open. Every route below answers anybody who can reach the address.
+#
+# What belongs here instead — and it is deliberately NOT a copy of what was
+# removed, because a product must not hold credentials to the identity
+# store:
+#
+#   1. /auth/callback, receiving a one-time code from Core and exchanging
+#      it server-to-server for a short-lived JWT scoped to this client.
+#   2. Verification of that token against Core's published JWKS —
+#      signature, iss, exp, and aud naming *this* application, so a token
+#      minted for one of the other seven does not open this one.
+#   3. Enforcement from the token's claims. Core stays the only service
+#      that reads the identity database.
+#
+# One property is lost in that move and has to be replaced on purpose,
+# not by accident: the old guard re-read the user row on every request, so
+# a suspension or a revoked seat bit on the very next call. A token cannot
+# do that. The replacement is a short lifetime, and how short IS the
+# security decision — OPEN-DECISIONS #11, and the skipped tests in
+# tests/test_backend_auth.py that are waiting for the number.
+#
+# Until all three exist this branch is development-only. Do not merge it and
+# do not point a deployment at it.
+# ==========================================================================
 
 
 # Registered last, so it is the outermost layer and sees every response —
@@ -169,14 +148,6 @@ if os.environ.get("MAEC_DEV"):
         allow_headers=["*"],
     )
 
-app.include_router(router_auth.router)
-app.include_router(router_admin.router)
-app.include_router(admin_roles.router)
-app.include_router(admin_tools.router)
-app.include_router(admin_users.router)
-app.include_router(admin_audit.router)
-app.include_router(admin_import.router)
-app.include_router(admin_provisioning.router)
 app.include_router(hapext.router)
 app.include_router(airsizer.router)
 app.include_router(rebadge.router)
@@ -192,7 +163,10 @@ async def health():
         "version": __version__,
         "modules": ["HAPExt", "AirSizer Pro"],
         "diffusers": len(air.diffusers),
-        "auth": "on",
+        # Was "on", and was true while the guard ran in this process. There
+        # is nothing to report as on now, and a health check is the worst
+        # place to overstate a protection.
+        "auth": "none",
     }
 
 

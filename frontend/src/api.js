@@ -1,14 +1,19 @@
 // Engineering Tools' client. Thin fetch wrappers: every call maps to one
 // endpoint that wraps one engine function — no logic lives here.
 //
-// Sign-in and the admin API are NOT here. They belong to MAEC One Core, and
-// live in maecone/api.js. This file imports one thing from there — the name
-// of the session-lapsed event — because the dependency runs that way round:
-// the product may lean on Core, never the reverse.
+// Sign-in and the admin API are NOT here and never were: they belong to
+// MAEC One Core, which is now a separate service. This name used to be
+// imported from Core's client — the one thing the product borrowed from it.
+// That client left with Core, so the name is defined here.
+//
+// Nothing dispatches it at the moment. Every route below is unauthenticated,
+// so there are no 401s to turn into one — the listener that used to drop the
+// user back to the sign-in screen went with App.jsx's session handling. It
+// stays because the reason for it does: when the OIDC client lands, a
+// rejected or expired token is exactly this event, and what it should do
+// then is send the browser to Core to sign in again.
 
-import { SESSION_EXPIRED } from './maecone/api'
-
-export { SESSION_EXPIRED }
+export const SESSION_EXPIRED = 'maec:session-expired'
 
 function checkAuth(response) {
   if (response.status === 401) {

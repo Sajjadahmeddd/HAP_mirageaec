@@ -3,17 +3,20 @@
 # needed here: the web app uses the engine only.
 fastapi>=0.110
 uvicorn[standard]>=0.27
-python-multipart>=0.0.9
-itsdangerous>=2.1
+python-multipart>=0.0.9      # every upload route takes an UploadFile
 
 pymupdf>=1.24
 openpyxl>=3.1
 pillow>=10.0
 
-# Identity: MAEC One Core (backend/identity/)
-sqlalchemy>=2.0
-alembic
-psycopg[binary]
-argon2-cffi
-python-dotenv
-slowapi
+# Gone with the identity package, which is maec-one-core's now:
+#   sqlalchemy, alembic, psycopg  the identity database and its migrations
+#   argon2-cffi                   password hashing
+#   slowapi                       the per-IP login rate limit
+#   itsdangerous                  starlette's signed-cookie sessions
+#   python-dotenv                 identity/config.py loaded .env; nothing
+#                                 else ever imported it, and after the split
+#                                 this service reads no .env at all
+#
+# The OIDC client will add one: a JWT library to verify Core's tokens
+# against its JWKS. Deliberately not added yet — see OPEN-DECISIONS #11.

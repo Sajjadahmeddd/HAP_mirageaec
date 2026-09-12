@@ -89,117 +89,74 @@ MuPDF's rewriter shifts a single annotation by 4.8 pt; that sheet is emitted
 with a named warning rather than silently. See the module summary for the
 open question about whether that should fail the sheet instead.
 
-## Sign-in
+## Sign-in — there is none, and that is temporary
 
-A Render service has a **public URL**, so without a gate anyone holding the
-link could upload reports and pull schedules. `backend/identity/` closes
-that, and **signing in is always required** — there is no configuration that
-leaves the app open.
+⚠️ **This service currently has no authentication of any kind.** Every route
+under `/api/` answers anybody who can reach the address, and so do `/docs`,
+`/redoc` and `/openapi.json`, which map every endpoint and its request shape.
+Do not deploy this branch.
 
-Accounts are per person, held in PostgreSQL, with argon2id password hashes.
-There is no shared credential and no built-in fallback account: an
-unseeded database means nobody can sign in, which is the safe direction.
+It used to say the opposite, and the opposite used to be true:
+`backend/identity/` held per-person accounts in PostgreSQL with argon2id
+hashes, a guard on every request, per-IP login rate limiting, escalating
+lockout and an append-only audit log. All of it now lives in **MAEC One
+Core**, in the `maec-one-core` repository and, once deployed, at
+`auth.mirageaec.com`. None of it was lost; it stopped being in *this*
+process.
 
-| Variable | Purpose |
-|---|---|
-| `DATABASE_URL` | PostgreSQL. `postgresql+psycopg://user:pass@host:5432/db` |
-| `SESSION_SECRET` | Signs the session cookie. Changing it signs everyone out. |
-| `BOOTSTRAP_ADMIN_EMAIL` | The first Global Admin, created by the seed. |
-| `BOOTSTRAP_ADMIN_PASSWORD` | That account's password. 8+ chars with upper, lower, digit and symbol. |
-| `SEED_TEST_USER_EMAIL` | An ordinary engineer, for testing the non-admin path. |
-| `SEED_TEST_USER_PASSWORD` | Set **both** or neither — unset means no test account. |
+Removing it was the point rather than a casualty. Two copies of one
+permission engine in two repositories drift from the day they exist, so the
+copy had to go before the handoff could be built against one source of truth.
 
-`.env` is read at startup and is gitignored; a real environment variable
-always wins over the file, so Render (which has no `.env`) is unaffected.
-`MAEC_SECRET_KEY` is still honoured as a fallback for `SESSION_SECRET` so an
-existing Render value keeps working.
+### What replaces it
 
-### Setting up locally
+A person signs in once at Core, opens the Engineering Tools tile, and arrives
+here already identified — no second login. Three pieces make that work and
+none of them exist yet:
 
-```powershell
-# once: create the database
-createdb -U postgres maec_identity
+1. **`/auth/callback`** — receives a one-time code from Core and exchanges it
+   server-to-server for a short-lived JWT scoped to this application.
+2. **Local verification** against Core's published JWKS — signature, `iss`,
+   `exp`, and `aud` naming *this* client, so a token minted for one of the
+   other seven applications does not open this one.
+3. **Enforcement from the token's claims** rather than from a database read.
+   Core stays the only service that touches the identity store; Engineering
+   Tools never holds credentials to it.
 
-# schema
-.\.venv\Scripts\python -m alembic -c backend/identity/alembic.ini upgrade head
+`tests/test_backend_auth.py` carries all three as skipped tests, alongside
+the list of product routes that must refuse a stranger — kept verbatim from
+when the guard enforced it, because that list is the specification the new
+guard inherits.
 
-# people, products, roles and permissions — safe to re-run
-.\.venv\Scripts\python -m backend.identity.seed
-```
+### The one property that does not survive unchanged
 
-The seed is idempotent: it looks every row up by its natural key before
-creating it, so a second run reports "nothing to do". Re-running it with a
-different `BOOTSTRAP_ADMIN_PASSWORD` resets that password, which is how a
-lost admin account is recovered without opening psql.
+The old guard re-read the user row on **every** request, so a suspension or a
+revoked seat took effect on the very next call. A token cannot do that: it is
+believed until it expires. The honest replacement is "within the token's
+lifetime", which makes **how long that lifetime is** a security decision
+rather than a tuning parameter.
 
-To add a migration after changing `models.py`:
-
-```powershell
-.\.venv\Scripts\python -m alembic -c backend/identity/alembic.ini revision --autogenerate -m "what changed"
-```
-
-**Read the generated file before applying it.** Autogenerate cannot see
-triggers, and the initial migration carries one: `audit_logs` has a
-`BEFORE UPDATE OR DELETE` trigger that raises, so the append-only rule is
-enforced by the database and not merely by convention.
-
-### What is enforced, and where
-
-Everything under `/api/` is guarded except `/api/auth/*` and `/api/health`,
-so a route added for a new module is protected without touching the guard.
-`identity/guard.py` holds the rules and runs on every request:
-
-- a session that resolves to an **active** user — read from the database each
-  time, so a suspension bites on the next request rather than at cookie
-  expiry;
-- `/api/admin/*` additionally requires **Global Admin**, and any mutation
-  there requires the CSRF header;
-- each product's routes require a **seat** on that product, so an unlicensed
-  person gets a 403 whatever the frontend rendered.
-
-`/docs`, `/redoc` and `/openapi.json` sit outside `/api/` and are named
-explicitly: they map every endpoint and its request shape, so they are gated
-rather than public. The SPA shell itself is always served — it has to load in
-order to show a login screen at all.
-
-Login is rate limited per IP, and an account locks for escalating periods
-after repeated failures. Every outcome — success, failure, lockout, logout —
-writes an `audit_logs` row with the address, the IP and the user agent. A
-failure always returns the same message and takes the same time, whether the
-address is unknown, the password wrong, or the account suspended or locked.
-
-The session is a **signed cookie**, not a server-side store, so it survives a
-restart or a second instance with no shared state. It is `httponly`,
-`samesite=lax`, `secure` on Render, and deliberately carries **no `domain`
-attribute**: the company site shares the registrable domain
-(`mirageaec.com`), and a cookie scoped to `.mirageaec.com` would place our
-session inside its reach.
-
-⚠️ **Middleware order matters.** The guard is registered *before*
-`SessionMiddleware` so that Starlette runs the session decoder first.
-Registered the other way round, `request.session` does not exist when the
-guard reads it and every request looks signed out.
+It is deliberately not decided here — see `OPEN-DECISIONS.md` #11, which also
+weighs the alternative of shipping a copy of the identity package and
+connecting to Core's database. That alternative works on day one and is
+rejected for a reason worth reading before anyone reaches for it again.
 
 ## The launcher
 
-Signing in lands on the MAEC One launcher, not inside a module. It is the
-same frame as the sign-in screen — `MaecOne.jsx`, shared by both — with the
-right-hand panel swapped and the eight tiles turned into controls.
-
-`READY` in `Launcher.jsx` is the whole release gate: it lists the module keys
-that can be opened, and every other tile shows "Coming soon". As each of the
-other seven products is built, add its key there and its tile turns on.
-
-The wordmark in the title bar goes back to the launcher, so a module is never
-a dead end. Signing out and a lapsed session both return there too, so the
-next sign-in never drops you straight back inside a module.
+Gone with Core. Signing in used to land on the MAEC One launcher — eight
+tiles, one per product — and `Launcher.jsx` went to `maec-one-core` with the
+rest of the sign-in surface. Engineering Tools is mounted at the root here
+and the title-bar wordmark is a plain mark: it pointed back at the launcher,
+and a control that cannot do what it says is worse than no control. It
+becomes a link to Core when the handoff lands.
 
 ## Response headers
 
 `SECURITY_HEADERS` in `main.py` bounds what a browser will do with a page we
-served. It gates nobody — a signed-in user cannot tell it is there — and is
-registered **last**, so it wraps every response including the guard's 401,
-which returns without calling through.
+served. It gates nobody, and is registered **last** so that it wraps every
+response. That mattered most when it wrapped the guard's 401, which returned
+without calling through; with the guard gone these headers are the only
+protection on this branch that still works exactly as it always did.
 
 The policy is tight because everything is same-origin. Two concessions are
 real needs, not guesses:
@@ -211,30 +168,24 @@ real needs, not guesses:
 
 `frame-ancestors` is `'self'`, not `'none'`: MAEC One may come to embed its
 modules, and `'none'` would forbid that on the day it does. Other origins are
-still refused, which is what stops the sign-in form being framed over someone
-else's page.
+still refused, which is what stops one of our pages being framed over someone
+else's.
 
 A CSP fails silently in the console rather than loudly, so changes to it need
 driving in a real browser, not just the test client.
 
 ## Adding the other MAEC One modules
 
-The tile list is **no longer a constant in the frontend**. `GET /api/auth/me`
-returns the catalogue, computed from the `applications` table, the
-organisation's `subscriptions` and the person's `user_licenses`. A tile is
-openable only when the product is `live`, the person holds a seat, and there
-is a `base_url` to send them to — and the API refuses the request
-independently, so a tile is a convenience rather than the gate.
+Core's business now, and documented there. The tile list is computed from the
+`applications` table, the organisation's subscriptions and the person's
+licences — none of which this service can see any more, which is the whole
+point of the split.
 
-To bring a product online: deploy it, set its `applications.base_url` and
-`status = 'live'`, then give people seats. Nothing is rebuilt.
-
-⚠️ **Sessions do not cross origins.** The cookie is host-only, so a user sent
-to another service is asked to sign in again. Single sign-on across the eight
-is a redirect-based token exchange (OIDC/JWT) issued by MAEC One Core once it
-is a service of its own at `auth.mirageaec.com` — deliberately not a cookie
-shared across subdomains, which would put our session in reach of the
-marketing site on the same registrable domain.
+⚠️ **Sessions do not cross origins.** A cookie is host-only, so single
+sign-on across the eight applications cannot be a shared cookie — that would
+scope our session to `.mirageaec.com`, within reach of the marketing site on
+the same registrable domain. It is a redirect-based token exchange
+(OIDC/JWT) issued by Core, which is the work described under "Sign-in" above.
 
 ## Statelessness
 

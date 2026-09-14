@@ -67,9 +67,12 @@ Interactive docs at `/docs`.
 
 ## PDF Rebadging
 
-Retitles CAD drawing sheets: PROJECT STAGE and SHEET STATUS are replaced in
-place, a row is appended to the revision history, and the bottom-right
-REVISION cell is overwritten. The drawing itself is never edited.
+Retitles CAD drawing sheets. The six values land in seven places, and every
+one is overwritten in place: PROJECT STAGE, SHEET STATUS, the bottom-right
+REVISION cell, and the REV, DESCRIPTION, DATE and APPROVED BY of the latest
+row in the revision table. No row is added — the latest entry is replaced
+where it stands, and older rows below it are left alone. An empty table is
+written from its bottom row. The drawing itself is never edited.
 
 Two rules shape the engine:
 

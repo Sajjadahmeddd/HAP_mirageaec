@@ -1,9 +1,10 @@
 """PDF Rebadging: the engine, against the real sample drawings.
 
 The acceptance conditions that matter for a revision-controlled document are
-all here: the old value leaves the file rather than being covered up, the
-revision history grows without being rewritten, and the drawing itself comes
-through untouched.
+all here: the old value leaves the file rather than being covered up — in all
+seven places, the latest revision row included, which is replaced rather than
+stacked on — older rows stay exactly as they were, and the drawing itself
+comes through untouched.
 
 Both coordinate frames are exercised. The samples are rotated-portrait; the
 native-landscape variant is built in a fixture from one of them, because the
@@ -14,6 +15,7 @@ geometry has to handle either.
 import glob
 import io
 import zipfile
+from dataclasses import replace
 from pathlib import Path
 
 import pymupdf
@@ -38,6 +40,8 @@ INPUTS = RebadgeInputs(
 
 # what every sample carries before it is touched
 EXISTING_ROW = ["A", "100% CONCEPT DESIGN SUBMISSION", "14 AUG 2026", "SK"]
+# what the latest row reads after INPUTS is applied
+NEW_ROW = ["B", "100% DETAILED DESIGN SUBMISSION", "03 SEP 2026", "CK"]
 
 
 pytestmark = pytest.mark.skipif(not SAMPLES, reason="sample drawings not present")
@@ -104,7 +108,6 @@ def test_every_sample_validates(path):
     check = pipeline.check(Path(path).read_bytes(), Path(path).name)
     assert check.ok, check.errors
     assert check.missing_labels() == []
-    assert check.blank_row_available
     assert check.current["stage"] == "CONCEPT DESIGN"
     assert check.current["rev"] == "A"
     assert len(check.current["history_rows"]) == 1
@@ -120,7 +123,6 @@ def test_the_landscape_variant_reads_the_same(landscape):
     assert check.ok, check.errors
     assert check.rotation == 0
     assert check.current["stage"] == "CONCEPT DESIGN"
-    assert check.blank_row_available
 
 
 def test_a_file_that_is_not_a_pdf_is_reported_not_raised():
@@ -174,7 +176,9 @@ def test_the_labels_and_rules_survive(rebadged, name):
 
 
 @pytest.mark.parametrize("name", [Path(p).name for p in SAMPLES])
-def test_history_grows_upward_without_touching_what_was_there(rebadged, name):
+def test_the_latest_history_row_is_overwritten_not_stacked_on(rebadged, name):
+    """The revision table gains no row: the latest entry is replaced where it
+    stands, and its old text leaves the file rather than sitting underneath."""
     payload, _ = rebadged[name]
     with _page(payload) as doc:
         page = doc[0]
@@ -182,14 +186,16 @@ def test_history_grows_upward_without_touching_what_was_there(rebadged, name):
         rows = reader.read_history(page, block)
         filled = [(i, r) for i, r in enumerate(rows) if r.filled()]
 
-        assert len(filled) == 2
-        (new_index, new_row), (old_index, old_row) = filled
-        assert new_index == old_index - 1, "the new row must sit directly above"
-        assert [old_row.rev, old_row.description, old_row.date,
-                old_row.approved_by] == EXISTING_ROW
-        assert [new_row.rev, new_row.description, new_row.date,
-                new_row.approved_by] == ["B", "100% DETAILED DESIGN SUBMISSION",
-                                         "03 SEP 2026", "CK"]
+        assert len(filled) == 1, "a rebadge must not add a revision row"
+        index, row = filled[0]
+        assert index == len(rows) - 1, "the entry is replaced where it stands"
+        assert [row.rev, row.description, row.date, row.approved_by] == NEW_ROW
+
+        # redaction, not cover-up: exactly the new words are in the row, so
+        # none of "A / 100% CONCEPT DESIGN SUBMISSION / 14 AUG 2026 / SK" remain
+        zone = (block.history.rows[index] * block.derotation).normalize()
+        found = sorted(w[4] for w in page.get_text("words", clip=zone))
+        assert found == sorted(" ".join(NEW_ROW).split())
 
 
 @pytest.mark.parametrize("name", [Path(p).name for p in SAMPLES])
@@ -210,7 +216,7 @@ def test_the_landscape_variant_edits_identically(landscape):
         assert reader.read_cell(page, block.stage) == "DETAILED DESIGN"
         assert reader.read_cell(page, block.revision) == "B"
         rows = [r for r in reader.read_history(page, block) if r.filled()]
-        assert [rows[0].rev, rows[1].rev] == ["B", "A"]
+        assert [[r.rev, r.description, r.date, r.approved_by] for r in rows] == [NEW_ROW]
 
 
 # ------------------------------------------------------- the drawing area
@@ -347,26 +353,89 @@ def test_reusing_the_current_revision_warns_but_still_works():
     assert any("already A" in w for w in result.warnings)
 
 
-def test_a_full_revision_table_is_refused_rather_than_guessed(tmp_path):
-    """With no blank row there is nowhere to write without destroying history."""
-    source = Path(SAMPLES[0]).read_bytes()
-    doc = pymupdf.open(stream=source, filetype="pdf")
+def _with_history(entries: list[RebadgeInputs]) -> bytes:
+    """The first sample with its revision table set to `entries`, bottom row first."""
+    doc = pymupdf.open(stream=Path(SAMPLES[0]).read_bytes(), filetype="pdf")
     page = doc[0]
     block = find_title_block(page)
     style = editor.TextStyle(7.7, False)
-    for row in range(len(block.history.rows)):        # fill every row
-        editor.append_history_row(page, block, INPUTS, row, style)
+    bottom = len(block.history.rows) - 1
+    for offset, entry in enumerate(entries):
+        editor.overwrite_history_row(page, block, entry, bottom - offset, style)
     buffer = io.BytesIO()
     doc.save(buffer)
     doc.close()
+    return buffer.getvalue()
 
-    check = pipeline.check(buffer.getvalue(), "full.pdf")
-    assert not check.ok
-    assert not check.blank_row_available
-    assert "revision table full" in check.errors[0]
 
-    payload, result = pipeline.rebadge(buffer.getvalue(), INPUTS, "full.pdf")
-    assert payload is None and not result.ok
+def _history_of(payload: bytes) -> list[list[str]]:
+    with _page(payload) as doc:
+        page = doc[0]
+        return [[r.rev, r.description, r.date, r.approved_by]
+                for r in reader.read_history(page, find_title_block(page)) if r.filled()]
+
+
+OLDER = replace(INPUTS, rev="A", description="100% CONCEPT DESIGN SUBMISSION",
+                date="14 AUG 2026", approved_by="SK")
+NEWER = replace(INPUTS, rev="B", description="100% DETAILED DESIGN SUBMISSION",
+                date="03 SEP 2026", approved_by="CK")
+
+
+def test_only_the_latest_row_is_replaced_and_older_revisions_stay():
+    """B is the latest entry, A below it. Rebadging to C replaces B alone —
+    A comes through word for word, which also proves the clearing zone did not
+    reach into the row beneath."""
+    data = _with_history([OLDER, NEWER])
+    assert _history_of(data) == [NEW_ROW, EXISTING_ROW]
+
+    later = replace(INPUTS, rev="C", description="ISSUED FOR TENDER",
+                    date="20 SEP 2026", approved_by="MA")
+    payload, result = pipeline.rebadge(data, later, "two-rows.pdf")
+    assert result.ok, result.errors
+    assert _history_of(payload) == [["C", "ISSUED FOR TENDER", "20 SEP 2026", "MA"],
+                                    EXISTING_ROW]
+
+
+def test_a_full_revision_table_is_rebadged_not_refused():
+    """Overwriting needs no blank row, so a full table is no longer a reason
+    to skip a sheet. The topmost row is the latest entry and is the one replaced."""
+    with pymupdf.open(SAMPLES[0]) as doc:
+        count = len(find_title_block(doc[0]).history.rows)
+    entries = [replace(INPUTS, rev=f"R{i}", description=f"ENTRY {i}",
+                       date="01 JAN 2026", approved_by="SK") for i in range(count)]
+    data = _with_history(entries)
+
+    check = pipeline.check(data, "full.pdf")
+    assert check.ok, check.errors
+
+    payload, result = pipeline.rebadge(data, INPUTS, "full.pdf")
+    assert result.ok, result.errors
+    assert [row[0] for row in _history_of(payload)] == [
+        "B", *[f"R{i}" for i in range(count - 2, -1, -1)]]
+
+
+def test_an_empty_revision_table_is_written_from_the_bottom_row():
+    """With no entry to replace, the values go where the first one would."""
+    data = _with_history([RebadgeInputs("", "", "", "", "", "")])   # clears row A
+    assert _history_of(data) == []
+
+    payload, result = pipeline.rebadge(data, INPUTS, "empty.pdf")
+    assert result.ok, result.errors
+    with _page(payload) as doc:
+        page = doc[0]
+        rows = reader.read_history(page, find_title_block(page))
+    assert [i for i, r in enumerate(rows) if r.filled()] == [len(rows) - 1]
+    assert _history_of(payload) == [NEW_ROW]
+
+
+def test_a_description_containing_a_heading_word_is_still_cleared():
+    """Headings are guarded by counting them outside the row, because a search
+    is a substring match — an old "REVISED LAYOUT" contains REV, and taking it
+    out is the point, not a lost heading."""
+    revised = replace(OLDER, description="REVISED LAYOUT")
+    payload, result = pipeline.rebadge(_with_history([revised]), INPUTS, "revised.pdf")
+    assert result.ok, result.errors
+    assert _history_of(payload) == [NEW_ROW]
 
 
 def test_text_that_needs_shrinking_is_shrunk_and_reported():

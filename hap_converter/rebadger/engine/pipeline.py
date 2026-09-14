@@ -63,15 +63,9 @@ def check(source: str | Path | bytes, filename: str) -> SheetCheck:
             result.errors.append(f"title block not readable: {exc}")
             return result
 
-        rows = reader.read_history(page, block)
+        # No room check: the latest revision row is overwritten rather than
+        # added to, so a full table rebadges like any other.
         result.current = reader.read_current(page, block)
-        target = reader.target_row_index(rows)
-        result.blank_row_available = target is not None
-        if target is None:
-            result.errors.append(
-                "revision table full — no blank row above the latest entry")
-            return result
-
         result.ok = True
         return result
 
@@ -110,11 +104,7 @@ def rebadge(source: str | Path | bytes, inputs: RebadgeInputs,
             return None, result
 
         rows = reader.read_history(page, block)
-        target = reader.target_row_index(rows)
-        if target is None:
-            result.errors.append(
-                "revision table full — no blank row above the latest entry")
-            return None, result
+        target = reader.overwrite_row_index(rows)
 
         before_text = verify.span_index(page)
         result.previous_rev = reader.read_cell(page, block.revision)
@@ -136,8 +126,9 @@ def rebadge(source: str | Path | bytes, inputs: RebadgeInputs,
                 report = editor.replace_cell(page, block, cell, text, style)
                 result.warnings += report.warnings
 
-            # appended: existing rows are never touched
-            result.warnings += editor.append_history_row(
+            # overwritten: the latest revision row is replaced where it
+            # stands, never stacked on; older rows below it are untouched
+            result.warnings += editor.overwrite_history_row(
                 page, block, inputs, target, row_style).warnings
 
             # overwritten: this cell always shows the current revision

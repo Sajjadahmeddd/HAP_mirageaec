@@ -100,7 +100,6 @@ def validate(files: list[UploadFile] = File(...)):
             "labels_found": check.labels_found,
             "missing_labels": check.missing_labels(),
             "current": check.current,
-            "blank_row_available": check.blank_row_available,
             "warnings": check.warnings,
             "errors": check.errors,
         })

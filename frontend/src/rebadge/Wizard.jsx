@@ -57,14 +57,14 @@ function ResultBand({ items }) {
 const BAND_BEFORE = (n) => [
   ['Batch Processing', `${n} sheet(s) selected`],
   ['Branding Consistency', 'Title block will be updated'],
-  ['Metadata Alignment', 'A revision row will be added'],
+  ['Metadata Alignment', 'Latest revision row will be replaced'],
   ['Drawing Preservation', 'Geometry left untouched'],
 ]
 
 const BAND_AFTER = (n) => [
   ['Batch Processing', `${n} sheet(s) processed`],
   ['Branding Consistency', 'Title block aligned'],
-  ['Metadata Alignment', 'Revision history updated'],
+  ['Metadata Alignment', 'Latest revision row replaced'],
   ['Drawing Preservation', 'Geometry unchanged'],
 ]
 
@@ -475,7 +475,7 @@ function Confirm({ state }) {
       {noop.length > 0 && (
         <div className="banner-interp">
           {noop.length} sheet(s) already carry revision {state.inputs.rev} — rebadging
-          them changes the history but not the revision. Likely a typo; you can proceed.
+          them rewrites that revision's row but not the revision. Likely a typo; you can proceed.
         </div>
       )}
       {excluded.length > 0 && (

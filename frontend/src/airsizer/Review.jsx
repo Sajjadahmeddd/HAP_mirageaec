@@ -117,17 +117,21 @@ export default function Review({ ctx }) {
     setBusy(true)
     setError('')
     try {
-      await airsizer.export({
+      const saved = await airsizer.export({
         spaces: ctx.spaces,
         inputs: ctx.sizingInputs,
         visible_columns: visible,
         base_name: ctx.airBaseName,
         project_name: ctx.airSource,
         details,
-        logo: await logoDataUrl(logo),
+        // Not awaited here: api.js reads it after the Save As dialog opens,
+        // so reading the image cannot use up the click the dialog needs.
+        logo: logoDataUrl(logo),
       })
-      ctx.rememberSizing()          // keep it in this browser's history
-      setDownloaded(true)
+      if (saved) {                  // false: they closed the dialog
+        ctx.rememberSizing()        // keep it in this browser's history
+        setDownloaded(true)
+      }
     } catch (err) {
       setError(err.message)
     } finally {

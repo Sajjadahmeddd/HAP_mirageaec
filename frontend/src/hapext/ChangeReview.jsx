@@ -2,7 +2,8 @@
 // highlighted, then Approve & Download.
 // Ported from hap_converter/ui/pages/change_review_page.py.
 
-import { base64ToBlob, saveBlob } from '../api'
+import { useState } from 'react'
+import { base64ToBlob, saveFile } from '../api'
 import { PreviewTable, SummaryStrip } from '../components.jsx'
 
 const PREVIEW_LIMIT = 40
@@ -10,6 +11,7 @@ const CONTEXT_ROWS = 6
 const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 export default function ChangeReview({ ctx }) {
+  const [error, setError] = useState('')
   const result = ctx.changeResult
   if (!result?.ok) return <div className="muted">No change request to review.</div>
 
@@ -24,7 +26,9 @@ export default function ChangeReview({ ctx }) {
   const firstNew = Math.max(0, existing - start)
 
   const approve = () => {
-    saveBlob(base64ToBlob(result.file_b64, XLSX_TYPE), filename)
+    setError('')
+    saveFile(filename, base64ToBlob(result.file_b64, XLSX_TYPE))
+      .catch((err) => setError(`Could not save ${filename}: ${err.message}`))
   }
 
   return (
@@ -43,6 +47,7 @@ export default function ChangeReview({ ctx }) {
         <button className="btn btn-secondary" onClick={() => ctx.setPage('hap-change')}>Re-process</button>
         <button className="btn btn-primary" onClick={approve}>Approve &amp; Download</button>
       </div>
+      {error && <div className="status-fail">{error}</div>}
 
       <div className="small">
         {previousName} • New line items are appended to the end and highlighted

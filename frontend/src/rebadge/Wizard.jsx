@@ -16,7 +16,7 @@
 // silence for a minute reads as a hang.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { rebadge } from '../api'
+import { rebadge, saveFile } from '../api'
 import { FileBadge, InfoCard, StepChips, StepTimeline, formatMb } from '../components.jsx'
 import { REBADGE, save as saveRecent } from '../recents'
 
@@ -825,16 +825,10 @@ export default function Wizard({ ctx }) {
       const result = await rebadge.apply(chosen, payloadOf(state.inputs))
       clearInterval(timer)
       setPercent(100)
-      const download = () => {
-        const url = URL.createObjectURL(result.blob)
-        const anchor = document.createElement('a')
-        anchor.href = url
-        anchor.download = result.name
-        document.body.appendChild(anchor)
-        anchor.click()
-        anchor.remove()
-        URL.revokeObjectURL(url)
-      }
+      // The Save As dialog, like every download in the app. The set is
+      // already built and held, so nothing waits between click and dialog.
+      const download = () => saveFile(result.name, result.blob)
+        .catch((err) => set({ error: `Could not save ${result.name}: ${err.message}` }))
       const when = new Date()
       setState((prev) => ({
         ...prev, busy: '', result, download,

@@ -6,6 +6,6 @@ uvicorn[standard]>=0.27
 python-multipart>=0.0.9
 itsdangerous>=2.1
 
-pymupdf>=1.24
+pymupdf>=1.28.2   # get_cdrawings(callback=...), which the rebadger's title-block read relies on
 openpyxl>=3.1
 pillow>=10.0

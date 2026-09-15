@@ -105,41 +105,101 @@ def _covers(runs: list[tuple[float, float]], low: float, high: float,
     return any(a <= low + tol and b >= high - tol for a, b in runs)
 
 
-def _segments(page: pymupdf.Page) -> tuple[list, list]:
-    """Ruled lines in displayed space: (horizontals, verticals).
+# The title block sits in the right-hand strip of the sheet and the drawing
+# fills the rest. Only line work touching this region is read: from a little
+# left of the PROJECT STAGE label — the history table and the cells all start
+# at that column — to the sheet's right edge, and from well above the label
+# down to the bottom edge. The revision table grows upward from its header; in
+# both drawing sets seen so far it reaches at most ~120 pt above PROJECT STAGE,
+# so 400 pt leaves room for a much taller table without reading the drawing.
+_REGION_LEFT = 40.0
+_REGION_ABOVE = 400.0
 
-    Rectangles are unrolled into their four edges — the grid is drawn as a mix
-    of both, and a cell boundary is a cell boundary however it was emitted.
 
-    An A1 drawing carries tens of thousands of endpoints, and sending each one
-    through `Point * Matrix` costs several times more than reading the drawings
-    did — every one of them builds two objects and crosses the binding twice.
-    The rotation is a single affine transform, so it is applied here as
-    arithmetic on floats: identical result, none of the wrapper cost.
+def _title_region(page: pymupdf.Page, stage_label: pymupdf.Rect) -> pymupdf.Rect:
+    """The displayed area whose ruled lines can bound a title-block cell."""
+    return pymupdf.Rect(stage_label.x0 - _REGION_LEFT, stage_label.y0 - _REGION_ABOVE,
+                        page.rect.x1, page.rect.y1)
+
+
+def _segments(page: pymupdf.Page, region: pymupdf.Rect) -> tuple[list, list]:
+    """Ruled lines in displayed space near `region`: (horizontals, verticals).
+
+    Why a region, and why a callback. This used to be `page.get_drawings()`,
+    which builds a Python object for every vector path on the sheet. The
+    drawing is never edited, yet it is nearly all of that: ELE-1010 of the
+    00044-DHCGP set carries 692,017 items, and reading them peaked at 2.6 GB —
+    five times what the deployed service has, so a single upload killed it and
+    the browser was left with a bare 502. `get_cdrawings(callback=...)` hands
+    over one path at a time and keeps nothing; a path whose bounding box misses
+    the region is dropped after one comparison. Measured on ELE-1010: 53 MB.
+
+    A path is kept whole when its box touches the region, so a rule that runs
+    across the sheet is still seen at its full length — `_covers` needs that.
+
+    Why everything in the callback is guarded. PyMuPDF runs the callback from
+    inside MuPDF, and an exception that escapes it does not come back as an
+    exception: it takes the process down (exit 139 when tried deliberately) —
+    in production, the whole web service. So the first failure is recorded,
+    the rest of the page is skipped, and the sheet is refused as unreadable.
+
+    Rectangles and quads are unrolled into their four edges — the grid is drawn
+    as a mix of lines, rectangles and, on ELE-1111, the sheet frame as a single
+    quad, and a cell boundary is a cell boundary however it was emitted. Edges
+    that are not axis-aligned fail the straightness test and drop out.
+
+    The rotation is one affine transform, applied as float arithmetic rather
+    than `Point * Matrix`, which on tens of thousands of endpoints costs several
+    times more than reading the drawings did.
     """
     a, b, c, d, e, f = page.rotation_matrix
+    zone = (region * page.derotation_matrix).normalize()
+    zx0, zy0, zx1, zy1 = zone.x0, zone.y0, zone.x1, zone.y1
     horizontals: list[tuple[float, float, float]] = []
     verticals: list[tuple[float, float, float]] = []
+    failure: list[BaseException] = []
 
-    for drawing in page.get_drawings():
-        for item in drawing["items"]:
-            if item[0] == "l":
-                pairs = ((item[1], item[2]),)
-            elif item[0] == "re":
-                rect = item[1]
-                pairs = ((rect.tl, rect.tr), (rect.tr, rect.br),
-                         (rect.br, rect.bl), (rect.bl, rect.tl))
-            else:
-                continue                       # curves are never grid lines
-            for start, end in pairs:
-                x1 = start.x * a + start.y * c + e
-                y1 = start.x * b + start.y * d + f
-                x2 = end.x * a + end.y * c + e
-                y2 = end.x * b + end.y * d + f
-                if abs(y1 - y2) < _STRAIGHT and abs(x1 - x2) >= _STRAIGHT:
-                    horizontals.append((y1, min(x1, x2), max(x1, x2)))
-                elif abs(x1 - x2) < _STRAIGHT and abs(y1 - y2) >= _STRAIGHT:
-                    verticals.append((x1, min(y1, y2), max(y1, y2)))
+    def edge(sx, sy, ex, ey):
+        x1 = sx * a + sy * c + e
+        y1 = sx * b + sy * d + f
+        x2 = ex * a + ey * c + e
+        y2 = ex * b + ey * d + f
+        if abs(y1 - y2) < _STRAIGHT and abs(x1 - x2) >= _STRAIGHT:
+            horizontals.append((y1, min(x1, x2), max(x1, x2)))
+        elif abs(x1 - x2) < _STRAIGHT and abs(y1 - y2) >= _STRAIGHT:
+            verticals.append((x1, min(y1, y2), max(y1, y2)))
+
+    def keep(path):
+        if failure:
+            return
+        try:
+            px0, py0, px1, py1 = path["rect"]
+            if px1 < zx0 or px0 > zx1 or py1 < zy0 or py0 > zy1:
+                return                             # the drawing, not the title block
+            for item in path["items"]:
+                kind = item[0]
+                if kind == "l":
+                    (sx, sy), (ex, ey) = item[1], item[2]
+                    edge(sx, sy, ex, ey)
+                elif kind == "re":
+                    x0, y0, x1, y1 = item[1]
+                    edge(x0, y0, x1, y0)
+                    edge(x1, y0, x1, y1)
+                    edge(x1, y1, x0, y1)
+                    edge(x0, y1, x0, y0)
+                elif kind == "qu":
+                    (ulx, uly), (urx, ury), (llx, lly), (lrx, lry) = item[1]
+                    edge(ulx, uly, urx, ury)
+                    edge(urx, ury, lrx, lry)
+                    edge(lrx, lry, llx, lly)
+                    edge(llx, lly, ulx, uly)
+                # curves are never grid lines
+        except Exception as exc:                   # must not cross into MuPDF
+            failure.append(exc)
+
+    page.get_cdrawings(callback=keep)
+    if failure:
+        raise TitleBlockError(f"could not read the sheet's line work: {failure[0]}")
     return horizontals, verticals
 
 
@@ -292,25 +352,53 @@ def _history(page, rows_by_y, cols_by_x, stage_cell: Cell) -> HistoryTable:
     The header row carries REV / DESCRIPTION / DATE / APPROVED BY immediately
     above PROJECT STAGE. Column edges are the verticals crossing it; body rows
     are the bands stacked above it, which is the direction the table grows.
+
+    Labels are believed only on the header row itself. The same words can be
+    printed anywhere on a sheet, and a sheet can misprint its own heading: the
+    whole 00044-DHCGP set reads "APRROVED BY", and the only "APPROVED BY" on
+    those sheets is a note near the top. Taking the nearest match above PROJECT
+    STAGE put APPROVED BY in the DATE column — the approver's initials were
+    printed over the date and the old approver was left in place. So the row is
+    fixed by DESCRIPTION, REV and DATE must be on it, and APPROVED BY is read
+    from it when spelled as expected and is otherwise the column right of DATE.
     """
     top_of_stage = stage_cell.rect.y0
+    above = [r for r in _labels(page, "DESCRIPTION") if r.y1 <= top_of_stage + _EDGE]
+    if not above:
+        raise TitleBlockError("history label 'DESCRIPTION' not found above PROJECT STAGE")
+    anchor = max(above, key=lambda r: r.y0)
+    row_middle = (anchor.y0 + anchor.y1) / 2
+
+    def on_header_row(name: str) -> list[pymupdf.Rect]:
+        return [r for r in _labels(page, name)
+                if r.y0 - _EDGE <= row_middle <= r.y1 + _EDGE and r.y1 <= top_of_stage + _EDGE]
+
     header_labels = {}
     for name in HISTORY_LABELS:
-        candidates = [r for r in _labels(page, name) if r.y1 <= top_of_stage + _EDGE]
-        if not candidates:
-            raise TitleBlockError(f"history label {name!r} not found above PROJECT STAGE")
-        header_labels[name] = max(candidates, key=lambda r: r.y0)
+        hits = on_header_row(name)
+        if hits:
+            header_labels[name] = min(hits, key=lambda r: r.x0)
+        elif name != "APPROVED BY":
+            raise TitleBlockError(f"history label {name!r} not found on the revision table header")
 
     leftmost = min(header_labels.values(), key=lambda r: r.x0)
     header = _cell_around(leftmost, rows_by_y, cols_by_x)
-    right_edge = max(_cell_around(r, rows_by_y, cols_by_x).x1
-                     for r in header_labels.values())
+    middle = (header.y0 + header.y1) / 2
+    crossing = sorted(x for x, runs in cols_by_x.items()
+                      if _covers(runs, middle, middle) and x >= header.x0 - _EDGE)
+
+    if "APPROVED BY" in header_labels:
+        right_edge = max(_cell_around(r, rows_by_y, cols_by_x).x1
+                         for r in header_labels.values())
+    else:
+        date_right = _cell_around(header_labels["DATE"], rows_by_y, cols_by_x).x1
+        beyond = [x for x in crossing if x > date_right + _EDGE]
+        if not beyond:
+            raise TitleBlockError("no column found for 'APPROVED BY' right of DATE")
+        right_edge = beyond[0]
     header = pymupdf.Rect(header.x0, header.y0, right_edge, header.y1)
 
-    middle = (header.y0 + header.y1) / 2
-    edges = sorted(x for x, runs in cols_by_x.items()
-                   if _covers(runs, middle, middle)
-                   and header.x0 - _EDGE <= x <= header.x1 + _EDGE)
+    edges = [x for x in crossing if x <= header.x1 + _EDGE]
     if len(edges) < len(HISTORY_LABELS) + 1:
         raise TitleBlockError("revision table has too few column rules")
 
@@ -322,6 +410,8 @@ def _history(page, rows_by_y, cols_by_x, stage_cell: Cell) -> HistoryTable:
         if left is None or right is None:
             raise TitleBlockError(f"no column found for {name!r}")
         columns[_COLUMN_KEYS[name]] = (left, right)
+    if "approved_by" not in columns:
+        columns["approved_by"] = (columns["date"][1], right_edge)
 
     rules = sorted((y for y, runs in rows_by_y.items()
                     if y <= header.y0 + _EDGE and _covers(runs, header.x0, header.x1)),
@@ -341,13 +431,18 @@ def _history(page, rows_by_y, cols_by_x, stage_cell: Cell) -> HistoryTable:
 
 
 def find_title_block(page: pymupdf.Page) -> TitleBlock:
-    """Locate every region this module edits, or say why it cannot."""
-    horizontals, verticals = _segments(page)
+    """Locate every region this module edits, or say why it cannot.
+
+    PROJECT STAGE is found first, from the text layer, because it says where
+    the title block is — and so which line work is worth reading at all.
+    """
+    stage_label = find_label(page, STAGE_LABEL)
+    horizontals, verticals = _segments(page, _title_region(page, stage_label))
     if not horizontals or not verticals:
-        raise TitleBlockError("no ruled lines on the sheet — is it a scan?")
+        raise TitleBlockError("no ruled lines around the title block — is it a scan?")
     rows_by_y, cols_by_x = _group(horizontals), _group(verticals)
 
-    stage = _labelled_cell(page, STAGE_LABEL, rows_by_y, cols_by_x)
+    stage = _labelled_cell(page, STAGE_LABEL, rows_by_y, cols_by_x, label_rect=stage_label)
     status = _labelled_cell(page, STATUS_LABEL, rows_by_y, cols_by_x)
 
     # REVISION sits low on the sheet; REV in the history table is a different

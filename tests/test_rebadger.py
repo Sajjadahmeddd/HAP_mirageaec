@@ -22,7 +22,7 @@ import pymupdf
 import pytest
 from PIL import Image, ImageChops
 
-from hap_converter.rebadger.engine import audit, editor, pipeline, reader, verify
+from hap_converter.rebadger.engine import audit, editor, locator, pipeline, reader, verify
 from hap_converter.rebadger.engine.locator import TitleBlockError, find_title_block
 from hap_converter.rebadger.engine.models import RebadgeInputs
 
@@ -464,3 +464,77 @@ def test_a_value_that_cannot_fit_its_cell_fails_the_sheet():
     assert payload is None, "a sheet that cannot be edited correctly must not be emitted"
     assert not result.ok
     assert "Shorten the value" in result.errors[0]
+
+
+# ----------------------------------------------- a consultant's real drawing set
+# Sheets from the 00044-DHCGP package that the deployed service could not
+# process. They live in the repository folder the user added them to; the
+# tests skip when it is absent rather than failing on a checkout without it.
+FAILURES = Path(__file__).resolve().parents[1] / "PDF_Rebadging failures"
+
+
+def _failure(tag: str) -> Path:
+    found = sorted(FAILURES.glob(f"*{tag}.pdf"))
+    if not found:
+        pytest.skip(f"{tag} from the 00044-DHCGP set is not present")
+    return found[0]
+
+
+def test_a_misspelled_approved_by_heading_keeps_its_own_column():
+    """The set prints "APRROVED BY", and the only "APPROVED BY" on the sheet is
+    a note near the top. Believing that note put APPROVED BY in the DATE
+    column: the initials were printed over the date and the old approver was
+    left in place, while validation reported the sheet as fine."""
+    path = _failure("ELE-1110")
+    with pymupdf.open(path) as doc:
+        columns = find_title_block(doc[0]).history.columns
+    assert columns["approved_by"] != columns["date"]
+    assert columns["approved_by"][0] >= columns["date"][1] - 0.6
+
+    payload, result = pipeline.rebadge(path.read_bytes(), INPUTS, path.name)
+    assert result.ok, result.errors
+    assert _history_of(payload) == [NEW_ROW]
+
+
+def test_a_sheet_frame_drawn_as_one_quad_still_bounds_the_title_block():
+    """ELE-1111 draws its outer frame as a single quad rather than four lines,
+    and that frame is the right edge of PROJECT STAGE and SHEET STATUS and the
+    bottom edge of REVISION. Reading only lines and rectangles, the sheet was
+    refused: "no ruled line either side of the label"."""
+    path = _failure("ELE-1111")
+    check = pipeline.check(path.read_bytes(), path.name)
+    assert check.ok, check.errors
+
+    payload, result = pipeline.rebadge(path.read_bytes(), INPUTS, path.name)
+    assert result.ok, result.errors
+    assert _history_of(payload) == [NEW_ROW]
+    with _page(payload) as doc:
+        page = doc[0]
+        assert reader.read_cell(page, find_title_block(page).revision) == "B"
+
+
+def test_a_failure_while_reading_line_work_is_a_refusal_not_a_crash(monkeypatch):
+    """PyMuPDF calls back into Python for every vector path, and an exception
+    that escapes that callback does not come back as an exception — MuPDF
+    takes the whole process down with it, which in production is the web
+    service. Anything that goes wrong in there has to become a refused sheet.
+
+    Without the guard this test does not fail; it kills the test run."""
+    monkeypatch.setattr(locator, "_STRAIGHT", None)    # every comparison raises TypeError
+    check = pipeline.check(Path(SAMPLES[0]).read_bytes(), "sheet.pdf")
+    assert not check.ok
+    assert "could not read the sheet's line work" in check.errors[0]
+
+
+def test_the_drawing_outside_the_title_block_is_not_read():
+    """ELE-1010 carries 692,017 vector items. Reading all of them peaked at
+    2.6 GB and a single upload took down the 512 MB service. Paths whose
+    bounding box misses the title-block region are never collected."""
+    path = _failure("ELE-1110")
+    with pymupdf.open(path) as doc:
+        page = doc[0]
+        region = locator._title_region(page, locator.find_label(page, locator.STAGE_LABEL))
+        horizontals, verticals = locator._segments(page, region)
+        everything_h, everything_v = locator._segments(page, page.rect)
+    assert horizontals and verticals
+    assert len(horizontals) + len(verticals) < len(everything_h) + len(everything_v)

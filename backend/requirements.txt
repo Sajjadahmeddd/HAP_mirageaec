@@ -18,5 +18,9 @@ pillow>=10.0
 #                                 else ever imported it, and after the split
 #                                 this service reads no .env at all
 #
-# The OIDC client will add one: a JWT library to verify Core's tokens
-# against its JWKS. Deliberately not added yet — see OPEN-DECISIONS #11.
+# The OIDC client (backend/maec_auth/). Core signs RS256 and publishes the
+# public halves; the code exchange is server-to-server; this product signs its
+# own session cookie, which carries nothing but an opaque id.
+pyjwt[crypto]>=2.8
+httpx>=0.27
+itsdangerous>=2.1

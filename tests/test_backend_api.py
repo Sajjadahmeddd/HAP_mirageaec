@@ -44,15 +44,15 @@ SCHEDULE_ROWS = [
 
 
 @pytest.fixture
-def client(app_client):
+def client(engineer_client):
     """These tests exercise the routers, not the gate.
 
-    It used to sign in as an ordinary engineer to get past the gate and, in
-    doing so, prove that a normal seat was enough. There is no gate and no
-    seat: the routers answer directly. What these tests check — that each
-    endpoint wraps its engine function correctly — is unchanged either way.
+    Signed in as an ordinary engineer, through the real OIDC flow against the
+    miniature Core in conftest.py, so the requests reach the routers at all —
+    and, in doing so, prove that a normal seat is enough. The gate itself is
+    tested in test_backend_auth.py.
     """
-    return app_client
+    return engineer_client
 
 
 @pytest.fixture
@@ -83,12 +83,11 @@ def test_health_reports_both_modules_and_the_catalogs(client):
     assert body["status"] == "ok"
     assert body["modules"] == ["HAPExt", "AirSizer Pro"]
     assert body["diffusers"] == 5
-    # Was "on", and was true. Signing in is MAEC One Core's now and nothing
-    # here has replaced it, so the endpoint reports "none" — asserted rather
-    # than deleted, because a health check quietly dropping a field is how a
-    # service ends up claiming a protection it lost. Changes back with the
-    # OIDC client; see tests/test_backend_auth.py.
-    assert body["auth"] == "none"
+    # "none" for the one branch that had no gate, as this comment promised
+    # until the OIDC client landed. Asserted rather than dropped, because a
+    # health check quietly losing a field is how a service ends up claiming a
+    # protection it lost.
+    assert body["auth"] == "oidc"
 
 
 # ------------------------------------------------------------------- HAPExt

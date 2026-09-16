@@ -20,26 +20,35 @@ from fastapi.staticfiles import StaticFiles
 from hap_converter import __version__
 
 from .deps import airsizer_config, hapext_config
+from .maec_auth import config as auth_config
+from .maec_auth import guard
+from .maec_auth import routes as auth_routes
 from .routers import airsizer, hapext, rebadge
 
 FRONTEND_DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Say what this process actually is, which at the moment is unguarded.
+    """Say what this process is, and refuse to be a deployment that cannot.
 
-    It printed "auth ON" for as long as the identity stack was in this
-    process. That stack is MAEC One Core's now, in its own repository and
-    its own service, and nothing has taken over from it here — so the honest
-    line is the opposite one, printed on every boot, where a quiet start
-    would be worse.
+    For one branch this printed "NO AUTHENTICATION" on every boot, because
+    that was true. It is not any more: every route below needs a token MAEC
+    One Core signed. What is still worth saying out loud is the configuration,
+    because a service missing its client secret can serve a sign-in button
+    that only ever fails — on Render `require_all` refuses the boot outright,
+    and locally it prints what is absent rather than dying at import.
     """
     where = "on Render" if os.environ.get("RENDER") else "locally"
+    auth_config.require_all()
+    absent = auth_config.missing()
     print(f"Engineering Tools starting {where}.")
-    print("  !! NO AUTHENTICATION. Every API route answers anybody who can")
-    print("  !! reach this address. Sign-in moved to MAEC One Core and the")
-    print("  !! OIDC client that replaces it is not built yet. Development")
-    print("  !! only — do not deploy this build.")
+    if absent:
+        print("  !! " + ", ".join(absent) + " not set — nobody can sign in.")
+        print("  !! The API refuses every request until they are. This is the")
+        print("  !! closed direction, not an open one.")
+    else:
+        print(f"  auth: OIDC client of {auth_config.issuer()} "
+              f"(aud {auth_config.APP_KEY})")
     yield
 
 
@@ -84,42 +93,45 @@ SECURITY_HEADERS = {
 
 
 # ==========================================================================
-# THE GATE WAS HERE. NOTHING HAS REPLACED IT YET.
+# THE GATE. Engineering Tools as a client of MAEC One Core.
 # ==========================================================================
 #
-# Two middlewares stood at this point: a guard that refused every /api/*
-# call from anyone without a live account — Global Admin for /api/admin/*,
-# the CSRF header for admin mutations, a seat on the product for each
-# product's routes — and the signed-cookie session it read that account
-# from. Both belonged to the identity stack, which is MAEC One Core now, in
-# its own repository.
+# All three pieces the previous comment specified are here, in maec_auth/:
 #
-# Removing them was right: two copies of one permission engine in two
-# repositories drift from the day they exist. It also leaves this service
-# open. Every route below answers anybody who can reach the address.
+#   1. /auth/callback takes Core's one-time code and exchanges it
+#      server-to-server for a short-lived JWT scoped to this client
+#      (maec_auth/routes.py). /auth/login is the only place that redirects
+#      to Core, so there is one origin for a sign-in and no way to loop.
+#   2. maec_auth/verify.py checks that token against Core's published JWKS:
+#      RS256 and the header's kid, iss, exp, and aud naming *this*
+#      application, so a token minted for one of the other seven does not
+#      open this one.
+#   3. maec_auth/guard.py enforces from the claims, through the engine
+#      vendored from Core — from_claims, then resolve. This service never
+#      touches the identity database; Core remains the only one that does.
 #
-# What belongs here instead — and it is deliberately NOT a copy of what was
-# removed, because a product must not hold credentials to the identity
-# store:
+# The property that was lost is still lost, on purpose and not by accident:
+# nothing here re-reads a user row, so a suspension or a revoked seat bites
+# within the token's fifteen minutes rather than on the next call. That is
+# Core #16's number and #11's trade.
 #
-#   1. /auth/callback, receiving a one-time code from Core and exchanging
-#      it server-to-server for a short-lived JWT scoped to this client.
-#   2. Verification of that token against Core's published JWKS —
-#      signature, iss, exp, and aud naming *this* application, so a token
-#      minted for one of the other seven does not open this one.
-#   3. Enforcement from the token's claims. Core stays the only service
-#      that reads the identity database.
-#
-# One property is lost in that move and has to be replaced on purpose,
-# not by accident: the old guard re-read the user row on every request, so
-# a suspension or a revoked seat bit on the very next call. A token cannot
-# do that. The replacement is a short lifetime, and how short IS the
-# security decision — OPEN-DECISIONS #11, and the skipped tests in
-# tests/test_backend_auth.py that are waiting for the number.
-#
-# Until all three exist this branch is development-only. Do not merge it and
-# do not point a deployment at it.
+# Registered below `security_headers` so that one stays outermost and wraps
+# the guard's 401 — a refusal carries the same CSP as a page.
 # ==========================================================================
+
+
+@app.middleware("http")
+async def gate(request: Request, call_next):
+    """Refuse anything from a browser Core has not vouched for.
+
+    Synchronous inside: it reads an in-process dict and runs the engine over
+    claims already in memory. There is no database call left to keep off the
+    event loop, which is the whole shape of the change.
+    """
+    refusal = guard.inspect(request)
+    if refusal is not None:
+        return refusal
+    return await call_next(request)
 
 
 # Registered last, so it is the outermost layer and sees every response —
@@ -148,6 +160,7 @@ if os.environ.get("MAEC_DEV"):
         allow_headers=["*"],
     )
 
+app.include_router(auth_routes.router)
 app.include_router(hapext.router)
 app.include_router(airsizer.router)
 app.include_router(rebadge.router)
@@ -163,10 +176,11 @@ async def health():
         "version": __version__,
         "modules": ["HAPExt", "AirSizer Pro"],
         "diffusers": len(air.diffusers),
-        # Was "on", and was true while the guard ran in this process. There
-        # is nothing to report as on now, and a health check is the worst
-        # place to overstate a protection.
-        "auth": "none",
+        # "none" while this branch had no gate at all, and that was the
+        # honest word then. It is an OIDC client of Core now — named rather
+        # than a bare "on", because which mechanism is guarding a service is
+        # the useful thing to read on a health check.
+        "auth": "oidc",
     }
 
 

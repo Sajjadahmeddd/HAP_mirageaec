@@ -6,19 +6,46 @@
 // imported from Core's client — the one thing the product borrowed from it.
 // That client left with Core, so the name is defined here.
 //
-// Nothing dispatches it at the moment. Every route below is unauthenticated,
-// so there are no 401s to turn into one — the listener that used to drop the
-// user back to the sign-in screen went with App.jsx's session handling. It
-// stays because the reason for it does: when the OIDC client lands, a
-// rejected or expired token is exactly this event, and what it should do
-// then is send the browser to Core to sign in again.
+// A 401 now means the token behind this browser's session has expired —
+// Core mints them for fifteen minutes. Because Core's own session cookie
+// usually outlives that, sending the browser to /auth/login gets a fresh
+// token and comes straight back with no sign-in screen shown.
 
 export const SESSION_EXPIRED = 'maec:session-expired'
+
+// One re-authorization per visit. The redirect reloads the page, so a plain
+// variable would forget it had happened and the next 401 would redirect
+// again — and if the fresh token is refused too (a revoked seat, a suspended
+// organisation), that is a loop between two services with the user watching
+// it flicker. sessionStorage survives the redirect; a successful call clears
+// it, so a later expiry is free to re-authorize once more.
+const REAUTH_MARK = 'maec:reauthorizing'
+
+/** Send the browser to Core for a fresh token. False if we already tried. */
+export function reauthorize() {
+  try {
+    if (sessionStorage.getItem(REAUTH_MARK)) return false
+    sessionStorage.setItem(REAUTH_MARK, String(Date.now()))
+  } catch { /* private mode: fall through and redirect once */ }
+  window.location.assign('/auth/login')
+  return true
+}
+
+/** Called when a request succeeds: the round trip worked, so allow another
+ *  re-authorization the next time one is needed. */
+export function reauthorizationWorked() {
+  try { sessionStorage.removeItem(REAUTH_MARK) } catch { /* nothing to clear */ }
+}
 
 function checkAuth(response) {
   if (response.status === 401) {
     window.dispatchEvent(new CustomEvent(SESSION_EXPIRED))
-    throw new Error('Your session has expired. Please sign in again.')
+    if (reauthorize()) {
+      throw new Error('Your session expired — signing you in again…')
+    }
+    throw new Error(
+      'Your session expired and signing in again did not work. '
+      + 'You may no longer have access to Engineering Tools.')
   }
 }
 
@@ -72,6 +99,26 @@ export function base64ToBlob(b64, type) {
   return new Blob([bytes], { type })
 }
 
+
+// -------------------------------------------------------------------- auth
+export const auth = {
+  /** Who this browser is, or null when it is nobody.
+   *
+   *  Deliberately not routed through checkAuth: this is the question "am I
+   *  signed in?", and a 401 is one of its two valid answers, not a failure
+   *  that should redirect on its own. The caller decides what to do about it.
+   */
+  async me() {
+    const response = await fetch('/api/auth/me')
+    if (response.status === 401) return null
+    if (!response.ok) throw new Error(`Could not read the session (${response.status})`)
+    reauthorizationWorked()
+    return response.json()
+  },
+  logout() {
+    return fetch('/api/auth/logout', { method: 'POST' }).then(asJson)
+  },
+}
 
 // ------------------------------------------------------------------ HAPExt
 export const hapext = {

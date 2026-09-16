@@ -10,16 +10,16 @@
 // server-side: a sizing run happens in one sitting and the exported workbook
 // is the artifact. That part is untouched.
 //
-// WHAT IS MISSING, deliberately and temporarily: there is no sign-in, and
-// nothing here asks who the user is. The API does not ask either — see the
-// block in backend/main.py. When the OIDC client lands, this file regains a
-// /auth/callback route and the titlebar regains its two controls; until then
-// it renders the tools to whoever opens the page.
+// Who the user is comes from MAEC One Core. On load this asks the backend
+// (/api/auth/me); a 401 means no session here, and the browser is sent to
+// /auth/login, which bounces through Core and returns with a token. Core's
+// own session usually outlives this product's, so that round trip normally
+// shows no sign-in screen at all.
 
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 
-import { airsizer as airApi } from './api'
+import { airsizer as airApi, auth, reauthorize } from './api'
 import { AIRSIZER, HAPEXT, save as saveRecent } from './recents'
 import { ENTRY_POINTS, HOME_OF, TAB_OF, pageOf, pathOf } from './routes'
 
@@ -41,6 +41,16 @@ import AirReview from './airsizer/Review.jsx'
 const TABS = ['HAPExt', 'AirSizer Pro', 'HAPAudit', 'PDF Rebadging']
 const VERSION = '1.2'
 
+// Which module in Core's registry each tab belongs to. The backend decides
+// whether a tab is shown — it runs the tool rules through the same engine
+// Core does — and this is only the name it answers under.
+const MODULE_OF = {
+  'HAPExt': 'hapext',
+  'AirSizer Pro': 'airsizer',
+  'HAPAudit': 'hapaudit',
+  'PDF Rebadging': 'rebadge',
+}
+
 const PAGES = {
   'hap-home': HapHome,
   'hap-upload': HapUpload,
@@ -58,7 +68,7 @@ const PAGES = {
 }
 
 // ------------------------------------------------------- Engineering Tools
-function EngineeringTools({ ctx, airConfig, airError }) {
+function EngineeringTools({ ctx, airConfig, airError, modules }) {
   const location = useLocation()
   const navigate = useNavigate()
   const page = pageOf(location.pathname)
@@ -93,7 +103,12 @@ function EngineeringTools({ ctx, airConfig, airError }) {
       </div>
 
       <div className="tabbar">
-        {TABS.map((name) => {
+        {/* A module whose winning tool rule is `hidden` or `no_access` is not
+            offered. That is decluttering, not the boundary: the guard refuses
+            `no_access` at the API whatever is rendered, and still answers
+            `hidden`. The two are kept apart on purpose — see maec_auth/guard.py
+            and Core's OPEN-DECISIONS #3. */}
+        {TABS.filter((name) => modules?.[MODULE_OF[name]] !== false).map((name) => {
           const disabled = name === 'HAPAudit' || (name === 'AirSizer Pro' && !airConfig)
           return (
             <button
@@ -160,18 +175,37 @@ export default function App() {
     navigate(pathOf(name))
   }, [navigate])
 
-  // Asked unconditionally now. It used to wait for GET /api/auth/me and
-  // then for a seat on Engineering Tools, so that an unentitled person never
-  // made a call the guard would refuse. There is no seat to check and no
-  // guard to refuse it.
+  // null while we are asking; then the answer from GET /api/auth/me, or a
+  // refusal we could not recover from.
+  const [session, setSession] = useState(null)
+
   useEffect(() => {
+    auth.me()
+      .then((who) => {
+        if (who) { setSession(who); return }
+        // No session here. Core probably still knows this browser, so one
+        // trip through /auth/login usually returns signed in. If we have
+        // already been sent once this visit, stop and say so rather than
+        // bouncing between two services.
+        if (!reauthorize()) {
+          setSession({ authenticated: false, refused: true })
+        }
+      })
+      .catch((err) => setSession({ authenticated: false, refused: true, error: err.message }))
+  }, [])
+
+  // Asked once there is a session: before that every call is a guaranteed
+  // 401, and a 401 now triggers a re-authorization — so asking early would
+  // send the browser to Core for a token it is already about to get.
+  useEffect(() => {
+    if (!session?.authenticated) return
     airApi.config()
       .then((cfg) => {
         setAirConfig(cfg)
         setVisibleColumns(cfg.result_columns.filter((c) => c.default).map((c) => c.key))
       })
       .catch((err) => setAirError(err.message))
-  }, [])
+  }, [session?.authenticated])
 
   const recordSizing = useCallback((row, diffuser, values, result) => {
     setSizingInputs((prev) => ({ ...prev, [row]: { diffuser, values } }))
@@ -268,10 +302,39 @@ export default function App() {
   // it. The route table is a single entry on purpose: adding a redirect to
   // Core here would look like authentication without being any, and this
   // branch is clearer being visibly open than subtly so.
+  if (session === null) {
+    return (
+      <div className="shell" style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <span className="muted">Signing you in…</span>
+      </div>
+    )
+  }
+
+  if (!session.authenticated) {
+    // Reached only when a fresh token did not help: the seat was revoked, the
+    // organisation was suspended, or Core refused for its own reasons. The
+    // way back is a click, never an automatic redirect — that is what keeps
+    // a refusal from becoming a loop.
+    return (
+      <div className="shell" style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <div className="card col" style={{ padding: '28px 32px', maxWidth: 460 }}>
+          <h2 className="h2">You are not signed in to Engineering Tools</h2>
+          <div className="small">
+            {session.error
+              || 'MAEC One Core did not grant this browser access. Your account may '
+                 + 'not hold a seat for this product.'}
+          </div>
+          <a className="btn btn-primary" href="/auth/login">Sign in again</a>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <Routes>
       <Route path="*" element={
-        <EngineeringTools ctx={ctx} airConfig={airConfig} airError={airError} />
+        <EngineeringTools ctx={ctx} airConfig={airConfig} airError={airError}
+                          modules={session.modules} />
       } />
     </Routes>
   )

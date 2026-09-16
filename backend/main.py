@@ -193,13 +193,22 @@ if FRONTEND_DIST.is_dir():
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def spa(full_path: str):
-        """Serve the SPA, letting the client router own every non-API path."""
+        """Serve the SPA, letting the client router own every non-API path.
+
+        The candidate is resolved and checked to be inside the bundle before
+        it is served. Without that, `dist / "../../.env"` is a real file and
+        this route hands it over: the path comes from the URL, and `..` in a
+        URL is not always collapsed by the client that sent it. Core's copy
+        of this route was fixed during the extraction; this branch carried
+        the original until now.
+        """
         if full_path.startswith("api/"):
             return JSONResponse({"detail": "Not found"}, status_code=404)
-        candidate = FRONTEND_DIST / full_path
-        if full_path and candidate.is_file():
+        root = FRONTEND_DIST.resolve()
+        candidate = (root / full_path).resolve()
+        if full_path and candidate.is_file() and candidate.is_relative_to(root):
             return FileResponse(candidate)
-        return FileResponse(FRONTEND_DIST / "index.html")
+        return FileResponse(root / "index.html")
 
 
 def run() -> None:

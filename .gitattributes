@@ -1,0 +1,5 @@
+# The vendored permission engine and its published hash. Pin both to LF in
+# every checkout, whatever core.autocrlf says on the machine, so the bytes on
+# disk stay the bytes maec-one-core hashed. See backend/maec_auth/README.md.
+backend/maec_auth/resolution.py text eol=lf
+backend/maec_auth/resolution.sha256 text eol=lf

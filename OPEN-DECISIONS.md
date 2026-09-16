@@ -15,7 +15,7 @@ both repositories.
 
 ---
 
-## 11. How does a separated Engineering Tools enforce anything? — blocking
+## 11. How does a separated Engineering Tools enforce anything? — decided: b1
 
 Every enforcement path takes a live `Session` on the identity database:
 `can()`, `entitled()`, `is_global_admin()`, `holds_business_admin()`, and the
@@ -27,6 +27,17 @@ it is in Core, which does not host them.
 
 Stated at length in `EXTRACTION-LOG.md` finding 6b — in the
 maec-one-core repository, where that document lives.
+
+**Decided (in maec-one-core, #11): option b1.** Core mints a token; this
+product re-runs Core's own five-step engine over its claims, rather than
+keeping a copy of the identity package or reaching for Core's database. One
+engine, two sources, never two engines.
+
+**Step 1 of it is in this branch:** `backend/maec_auth/resolution.py` is that
+engine, vendored byte-for-byte from Core, with
+`backend/tests/test_resolution_vendored.py` failing the moment the copy drifts.
+Why vendored rather than packaged, and what would change that, is Core's #18.
+The rule for updating the copy is `backend/maec_auth/README.md`.
 
 **Option (a): Engineering Tools keeps a copy of `identity/` and connects to
 the identity database.**

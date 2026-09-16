@@ -1,6 +1,51 @@
 # maec_auth
 
-Engineering Tools' half of MAEC One Core's sign-in.
+Engineering Tools' half of MAEC One Core's sign-in: an OIDC authorization-code
+client, and the vendored engine it enforces with.
+
+| File | What it does |
+|---|---|
+| `config.py` | The five settings below, from the environment only |
+| `verify.py` | Checks a token against Core's JWKS: RS256, kid, iss, aud, exp |
+| `routes.py` | `/auth/login` (the one redirect to Core), `/auth/callback`, `/api/auth/me`, `/api/auth/logout` |
+| `session.py` | The `et_session` cookie (an id only) and the claims held server-side |
+| `guard.py` | Every `/api/*` route: a session, then `resolve` for its permission |
+| `resolution.py` | Core's engine, vendored — **never edited here** |
+
+## Configuration
+
+Read from the environment, never a file — this service's one secret is its
+client secret, and it must not be committable. With any value missing nobody
+can sign in and the API refuses every request (the closed direction); on
+Render a missing value refuses the boot.
+
+| Variable | Local value |
+|---|---|
+| `OIDC_ISSUER` | `http://auth.maec.local:8000` |
+| `OIDC_CLIENT_ID` | `engineering-0bef07bb1d6703c4` |
+| `OIDC_CLIENT_SECRET` | shown once, when the client was registered in Core |
+| `OIDC_REDIRECT_URI` | `http://et.maec.local:8080/auth/callback` — exact, no trailing slash |
+| `ET_SESSION_SECRET` | any long random string; signs `et_session` |
+
+Running locally (PowerShell):
+
+```powershell
+$env:OIDC_ISSUER="http://auth.maec.local:8000"
+$env:OIDC_CLIENT_ID="engineering-0bef07bb1d6703c4"
+$env:OIDC_CLIENT_SECRET="<the secret Core showed once>"
+$env:OIDC_REDIRECT_URI="http://et.maec.local:8080/auth/callback"
+$env:ET_SESSION_SECRET="<any long random string>"
+.\.venv\Scripts\python -m uvicorn backend.main:app --host 0.0.0.0 --port 8080
+```
+
+Both hostnames need `127.0.0.1` entries in the hosts file, and they must be
+two hosts rather than `localhost` twice: cookies are scoped by host, not by
+port, so Core's `maec_session` and this product's `et_session` would otherwise
+share one jar.
+
+Decisions behind this client: OPEN-DECISIONS #19 (in-process sessions), #20
+(the docs need a session), #21 (the browser repairs an expired token).
+
 
 ## resolution.py is vendored. Do not edit it here.
 

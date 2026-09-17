@@ -235,7 +235,7 @@ function Import({ state, set }) {
             </div>
             <p>
               Each sheet is read, never written to. Every rebadged sheet is a new
-              file named <code>&lt;original&gt;.pdf</code>, so the set you
+              file named <code>&lt;original&gt;_rebadged.pdf</code>, so the set you
               imported stays exactly as it was. This is always on.
             </p>
           </div>
@@ -498,7 +498,7 @@ function Confirm({ state }) {
                   {revOf(file.name)} &nbsp;→&nbsp;
                   <strong>{state.inputs.rev}</strong>
                 </td>
-                <td>{file.name.replace(/\.pdf$/i, '')}.pdf</td>
+                <td>{file.name.replace(/\.pdf$/i, '')}_rebadged.pdf</td>
               </tr>
             ))}
           </tbody>

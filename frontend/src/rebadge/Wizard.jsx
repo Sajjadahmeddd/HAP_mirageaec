@@ -71,7 +71,13 @@ const BAND_AFTER = (n) => [
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
                 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
 
-const todayIso = () => new Date().toISOString().slice(0, 10)
+// The engineer's own calendar date, not UTC's: toISOString() is UTC, which in
+// India reads as yesterday until 5:30 in the morning.
+const todayIso = () => {
+  const now = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
 
 /** The format these title blocks print: `03 SEP 2026`, as the sheets already
  *  carry (`14 AUG 2026`). The picker holds ISO; the drawing gets this. */
@@ -81,9 +87,15 @@ function toDrawingDate(iso) {
   return `${day} ${MONTHS[Number(month) - 1]} ${year}`
 }
 
+// What a new rebadge starts with: the values most submissions use, so the
+// common case needs no typing. Every field stays editable.
 const blankInputs = () => ({
-  project_stage: '', sheet_status: '', rev: '',
-  description: '', approved_by: '', dateIso: todayIso(),
+  project_stage: 'TENDER DOCUMENTATION',
+  sheet_status: 'FOR INFORMATION',
+  rev: '0',
+  description: 'ISSUED FOR TENDER',
+  approved_by: 'SK',
+  dateIso: todayIso(),
 })
 
 /** What the six fields are worth right now, in the shape the API takes. */

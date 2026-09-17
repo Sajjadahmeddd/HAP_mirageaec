@@ -507,7 +507,7 @@ function Confirm({ state }) {
 
       <div className="small">
         {chosen.length} sheet(s) will be rebadged. Each becomes a new file named
-        <code> &lt;original&gt;.pdf</code>
+        <code> &lt;original&gt;_rebadged.pdf</code>
         {chosen.length > 1 && ', delivered as one ZIP with an audit record'}.
       </div>
     </div>

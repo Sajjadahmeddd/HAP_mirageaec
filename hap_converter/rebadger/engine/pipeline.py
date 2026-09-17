@@ -160,12 +160,12 @@ def _style(measured, fallback_size: float, fallback_bold: bool) -> editor.TextSt
 
 
 def output_name(original: str, taken: set[str]) -> str:
-    """`<stem>_rebadged.pdf`, versioned if that name is already spoken for."""
+    """`<stem>.pdf`, versioned if that name is already spoken for."""
     stem = Path(original).stem
-    candidate = f"{stem}_rebadged.pdf"
+    candidate = f"{stem}.pdf"
     version = 2
     while candidate in taken:
-        candidate = f"{stem}_rebadged_v{version}.pdf"
+        candidate = f"{stem}_v{version}.pdf"
         version += 1
     return candidate
 

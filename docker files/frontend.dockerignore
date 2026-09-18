@@ -1,0 +1,22 @@
+# Frontend build context.  ->  frontend/.dockerignore
+#
+# node_modules is the big one — npm ci installs a clean tree inside the
+# image, so copying the host's is pure waste and can break the build when
+# host and container architectures differ.
+#
+# Note: Dockerfile is excluded but nginx.conf and security-headers.conf are
+# NOT — the runtime stage copies both out of the build context.
+
+node_modules
+dist
+.git
+.env
+.env.*
+!.env.example
+npm-debug.log*
+.DS_Store
+.vscode/
+.idea/
+coverage/
+Dockerfile
+.dockerignore

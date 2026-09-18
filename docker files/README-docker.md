@@ -8,133 +8,156 @@ browser ──▶ frontend (nginx :80) ──┬── /            → React bu
                                         internal docker network, not public
 ```
 
-The browser still sees **one origin**, so there is no CORS config and no API
-base URL to inject — the frontend keeps calling `fetch('/api/...')` unchanged.
+The browser still sees **one origin**, so there is no CORS config and no
+API base URL to inject — the frontend keeps calling `fetch('/api/...')`
+unchanged.
+
+> **v2 — supersedes the earlier README.** That version told you to make a
+> code change to `main.py` (already present, and applying it would delete
+> the `/assets` mount and the SPA catch-all) and to run
+> `cp .env.example .env` (which would overwrite the MAEC One project's
+> `.env`). **Do neither.**
+
+---
+
+## No application code changes
+
+`main.py` already guards the bundle mount with `if FRONTEND_DIST.is_dir():`,
+so the container path is handled. The real mount is `StaticFiles` at
+`/assets` plus a catch-all SPA route — do not replace it with a single
+`StaticFiles` at `/`.
+
+Everything below is configuration only.
 
 ---
 
 ## File placement
 
-Drop these into the repository:
-
 ```
 HAPExt_App/
-├── docker-compose.yml          ← new
-├── .dockerignore               ← new
-├── .env.example                ← new  (copy to .env on the server)
-├── Makefile                    ← new  (optional convenience)
+├── docker-compose.yml               new
+├── docker-compose.override.yml      new, optional — laptop-sized limits
+├── .dockerignore                    new
+├── .env.maec.example                new   (copy to .env.maec)
+├── .gitattributes                   new   * text=auto eol=lf
+├── Makefile                         new, optional
 ├── backend/
-│   └── Dockerfile              ← new
+│   ├── Dockerfile                   new
+│   └── docker-entrypoint.sh         new   (must be LF, must be +x)
 └── frontend/
-    ├── Dockerfile              ← new
-    ├── nginx.conf              ← new
-    └── .dockerignore           ← new
+    ├── Dockerfile                   new
+    ├── nginx.conf                   new
+    ├── security-headers.conf        new
+    └── .dockerignore                new
 ```
 
-Add `.env` to `.gitignore` if it is not there already.
+Two `.gitignore` edits are required:
+
+```
+.env.maec                 # ignored already by the existing .env.* rule
+!.env.maec.example        # ADD THIS — .env.* would otherwise hide the template
+```
 
 ---
 
-## The one code change required
+## Why `.env.maec` and not `.env`
 
-`backend/main.py` currently mounts the built React bundle:
+The repository root already has a `.env`, and it belongs to **MAEC One** —
+it carries that project's `DATABASE_URL`, `SESSION_SECRET` and
+`BOOTSTRAP_ADMIN_PASSWORD`. Pointing `env_file:` at it would inject another
+project's database credentials into this container *and* boot the app on
+the fallback password committed in `auth.py`.
 
-```python
-app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="static")
-```
-
-In the split deployment nginx serves those files, and `frontend/dist` does
-**not** exist inside the backend image — so this line raises at startup and
-the container never becomes healthy.
-
-Make the mount conditional. Three lines, and it keeps the single-process
-Render/desktop mode working exactly as before:
-
-```python
-from pathlib import Path
-from fastapi.staticfiles import StaticFiles
-
-_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
-if _dist.is_dir():
-    # Single-origin mode (local dev, or the old Render service)
-    app.mount("/", StaticFiles(directory=_dist, html=True), name="static")
-# In Docker, nginx serves the bundle and this block is simply skipped.
-```
-
-Nothing else in the application changes.
-
----
-
-## Run it locally first (WSL)
-
-From the repo root, inside WSL — not PowerShell, so file permissions and
-line endings behave:
+So this stack reads `.env.maec`, and nothing here ever touches `.env`.
 
 ```bash
-cp .env.example .env
-python3 -c "import secrets; print(secrets.token_urlsafe(48))"   # paste into MAEC_SECRET_KEY
-nano .env                                                        # set MAEC_PASSWORD
+cp .env.maec.example .env.maec
+chmod 600 .env.maec
+python3 -c "import secrets; print(secrets.token_urlsafe(48))"   # → MAEC_SECRET_KEY
+nano .env.maec                                                   # set MAEC_PASSWORD too
+```
 
+**`MAEC_SECRET_KEY` is mandatory, not tuning.** `auth.py` falls back to a
+random key when it is unset, and that fallback is evaluated *per process*.
+With six workers that is six different cookie-signing keys, so roughly five
+requests in six fail verification and users are logged out at random. The
+container refuses to start without it.
+
+---
+
+## Run it locally first
+
+From the repo root, in WSL:
+
+```bash
 docker compose build
 docker compose up -d
 docker compose ps          # both services should reach "healthy"
 ```
 
-Then open <http://localhost>. Sign in, convert a real 212-page report, and
-rebadge a drawing set. If that works locally it will work on the VM — the
-images are identical.
+With `docker-compose.override.yml` present you get 2 workers on modest
+limits at **<http://localhost:8080>**; without it, the full production
+settings on port 80.
 
 ```bash
-docker compose logs -f     # watch both services
-docker compose down        # stop
+docker compose logs -f
+docker compose down
+```
+
+Introspection works normally — the entrypoint passes arguments through:
+
+```bash
+docker compose run --rm backend python -c "import pymupdf; print(pymupdf.__version__)"
+docker compose run --rm backend id            # must not be uid 0
+docker compose run --rm backend sh            # shell in the image
+```
+
+And the guard can be proven live:
+
+```bash
+docker compose run --rm -e MAEC_SECRET_KEY= backend    # must exit 1, FATAL
 ```
 
 **Verify parity before trusting it:** run the 212-page DCG BREEZE report
-through the container and diff the CSV against the known-good output. It
-should be byte-identical — 42,391 bytes, 813 rows. Same engine, same result.
+through the container and diff the CSV against the known-good output —
+42,391 bytes, 813 rows, matching SHA256. Same engine, same result.
 
 ---
 
 ## Deploy to the VM
 
-On a fresh Ubuntu box (Netcup, AWS, anywhere):
+Linux is strongly preferred (see *Host OS* below). On a fresh Ubuntu box:
 
 ```bash
-# 1. Docker
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER && newgrp docker
 
-# 2. Code
 git clone git@github.com:mirageaecindia-dev/HAPExt_App.git
 cd HAPExt_App
 
-# 3. Secrets
-cp .env.example .env && chmod 600 .env
-nano .env
+cp .env.maec.example .env.maec && chmod 600 .env.maec
+nano .env.maec
 
-# 4. Go
-docker compose build
-docker compose up -d
+docker compose -f docker-compose.yml build      # -f skips the laptop override
+docker compose -f docker-compose.yml up -d
 ```
 
-Updating later is three commands — and unlike Render, nothing deploys
-because someone pushed to `main`:
+Updating is three commands, and nothing deploys because someone pushed:
 
 ```bash
 git pull
-docker compose build
-docker compose up -d        # recreates only what changed
+docker compose -f docker-compose.yml build
+docker compose -f docker-compose.yml up -d
 ```
 
 Rollback is `git checkout <previous-commit>` and the same two commands.
 
 ---
 
-## HTTPS
+## HTTPS — required before sharing the URL
 
-The compose file publishes plain HTTP on :80. Do not expose that to the
-internet as-is — these are client drawings. Easiest fix is Caddy on the
-host, which obtains and renews certificates automatically:
+The stack publishes plain HTTP on :80. These are client drawings; do not
+expose that directly. Caddy on the host handles certificates automatically:
 
 ```
 # /etc/caddy/Caddyfile
@@ -143,8 +166,29 @@ engineeringtools.mirageaec.com {
 }
 ```
 
-Then close :80 to the world and let Caddy own :443. Alternatively point
-Cloudflare at the box, or terminate TLS in an AWS load balancer.
+Then firewall :80 to localhost and let Caddy own :443.
+
+**One ordering trap:** `RENDER=1` is set in compose so the session cookie
+keeps its `Secure` flag and HSTS stays on. Browsers refuse `Secure` cookies
+over plain HTTP on anything other than `localhost` — so on the VM, sign-in
+will fail over `http://<raw-ip>` until Caddy is in front. Either bring up
+HTTPS in the same session, or drop `RENDER` for the first smoke test and
+restore it before anyone else gets the URL.
+
+---
+
+## Host OS
+
+The images are Linux containers and run identically anywhere Docker runs —
+Ubuntu, Debian, Rocky, or Windows. **Choose Linux.** On Windows, Linux
+containers run inside a WSL2/Hyper-V VM anyway: you pay an extra
+virtualisation layer on a CPU- and I/O-bound workload, lose RAM to the VM,
+pay Netcup more for the Windows licence, and may hit Docker Desktop's
+commercial-use terms. Port 80 is also frequently already held by
+`http.sys`/IIS.
+
+Only the host provisioning commands differ; `docker compose build` and
+`docker compose up -d` are identical.
 
 ---
 
@@ -152,26 +196,60 @@ Cloudflare at the box, or terminate TLS in an AWS load balancer.
 
 | Setting | Where | Why |
 |---|---|---|
-| `WEB_CONCURRENCY=6` | `.env` | Worker **processes**. MuPDF holds the GIL, so threads measure ~1.0× while processes scale. Six leaves headroom for nginx and the OS. |
-| `proxy_read_timeout 900s` | `nginx.conf` | The setting Render did not expose. This is what was returning 502 on 40-sheet batches. |
-| `client_max_body_size 1G` | `nginx.conf` | nginx defaults to **1 MB** and would reject a drawing set outright. |
+| `WEB_CONCURRENCY=6` | `.env.maec` | Worker **processes**. MuPDF holds the GIL, so threads measure ~1.0× while processes scale. Six leaves headroom for nginx and the OS. |
+| `proxy_read_timeout 900s` | `nginx.conf` | The setting Render never exposed. This is what was returning 502 on 40-sheet batches. |
+| `client_max_body_size 1G` | `nginx.conf` | nginx defaults to **1 MB**. Deliberately set above the app's own 200 MB per-file limit so FastAPI returns its explained error rather than a bare 413. |
 | `tmpfs /tmp/maec-uploads` | `docker-compose.yml` | Uploads in RAM: faster than the overlay filesystem, and they cannot outlive the container. |
 | `cpus: "7.0"`, `memory: 12g` | `docker-compose.yml` | Caps the backend so a runaway batch cannot starve nginx or the host. |
 
-Watch a real batch with `docker stats`. If CPU pins at 700% and requests
+Watch a real batch with `docker stats`. If CPU pins near 700% and requests
 queue, that is the ceiling — raise `WEB_CONCURRENCY` toward 8 only if
 memory allows (roughly 200 MB peak per concurrent parse).
 
 ---
 
+## Security headers
+
+`main.py` sets CSP, `X-Content-Type-Options`, `X-Frame-Options`,
+`Referrer-Policy` and `Permissions-Policy` on every response it produces.
+Once nginx — not FastAPI — serves `index.html`, those no longer reach the
+HTML document, so `frontend/security-headers.conf` restates them.
+
+It is `include`d in `location /`, `location = /index.html` and
+`location /assets/`, and deliberately **not** at server level or in
+`location /api/`: nginx drops inherited `add_header` in any block that
+declares one of its own, and `add_header` appends rather than replaces, so
+including it on `/api/` would emit duplicates over the backend's own.
+
+If the policy in `main.py` ever changes, change it in both places or the
+API and the HTML document will disagree.
+
+---
+
+## Known follow-ups
+
+1. **Rename `RENDER`.** `main.py` keys the `Secure` cookie flag and HSTS on
+   a variable called `RENDER`; compose sets it to `1` so those survive the
+   move. After the VM deployment is green, rename it to something honest
+   (`MAEC_HTTPS`) and delete the compose line — a future maintainer on a
+   Netcup box should not find a variable called `RENDER`.
+2. **Two failing rebadge tests.** Pre-existing, from commit 975f9d4
+   (`sheet_rebadged.pdf` → `sheet.pdf`). Unrelated to Docker; own ticket.
+3. **`httpx` is missing**, so `test_backend_api`, `test_backend_auth` and
+   `test_backend_headers` cannot collect — the API, auth and header tests
+   are not running at all. Add it to a dev/test requirements file, **not**
+   `backend/requirements.txt` (it must not enter the production image).
+
+---
+
 ## What this does and does not fix
 
-**Fixed:** the 502. You now control the proxy timeout, and six worker
+**Fixed:** the 502. You control the proxy timeout now, and six worker
 processes handle concurrent batches instead of one.
 
-**Still worth doing:** the 5-pass engine restructure and TextWriter change.
-They were measured at 2.89–4.19× on real drawings, and that speedup is
-independent of hosting — it just stops being an emergency.
+**Still worth doing:** the 5-pass engine restructure and the TextWriter
+change — measured at 2.89–4.19× on real drawings. That speedup is
+independent of hosting; it just stops being an emergency.
 
 **Not needed yet:** a database image. The app is genuinely stateless. Add
 Postgres when MAEC One brings users, roles and subscriptions — not before.

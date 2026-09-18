@@ -1,17 +1,54 @@
-# Frontend build context. node_modules is the big one — npm ci installs a
-# clean tree inside the image, so copying the host's is pure waste and can
-# break the build when host and container architectures differ.
+# Repo-root build context (backend image). Nothing listed here reaches the
+# Docker daemon, which keeps builds fast and the image small.
+#
+# v2: added design-references/ and HAP_ext/ — Gate 0 measured 14 MB of the
+# 15.8 MB context as dead weight from these two.
 
-node_modules
-dist
 .git
+.gitignore
+.github
+
+# Built by its own image — never ship React source or node_modules here.
+frontend/
+
+# Reference material and screenshots: not needed to serve the API.
+design-references/
+HAP_ext/
+docs/
+PDF_Rebadging failures/
+
+# Desktop app tests and fixtures.
+tests/
+test/
+**/tests/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Sample drawings and reports — hundreds of MB, never needed at runtime.
+samples/
+fixtures/
+**/*.pdf
+**/*.xlsx
+**/*.csv
+!config/**/*.csv
+
+# Secrets must never be baked into an image layer. Both project env files.
 .env
 .env.*
-!.env.example
-npm-debug.log*
-.DS_Store
+!.env.maec.example
+
+# Editor / OS noise
 .vscode/
 .idea/
-coverage/
-Dockerfile
-.dockerignore
+.DS_Store
+*.log
+venv/
+.venv/
+
+*.md
+!README.md
+dist/
+build/

@@ -1,0 +1,69 @@
+# MAEC — two images, one origin.
+#   frontend : nginx, serves the React bundle and proxies /api
+#   backend  : FastAPI + the shared engine, multiple worker processes
+# No database: the app is stateless by design (signed-cookie sessions,
+# temp files deleted per request, Recent Projects in browser localStorage).
+
+name: maec
+
+services:
+  backend:
+    build:
+      # Repo root, because the engine packages live beside backend/
+      context: .
+      dockerfile: backend/Dockerfile
+    image: maec-backend:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Processes, not threads: MuPDF holds the GIL, so threads measure
+      # ~1.0x while separate processes actually scale. Leave ~2 cores for
+      # nginx and the OS on an 8-core box.
+      WEB_CONCURRENCY: "${WEB_CONCURRENCY:-6}"
+      PORT: "8000"
+      # MAEC_DEV must stay UNSET in production — it is what switches the
+      # permissive CORS middleware on for the local Vite dev server.
+    expose:
+      - "8000"          # internal network only; not published to the host
+    networks: [maec_net]
+    tmpfs:
+      # Uploads live in RAM rather than on the overlay filesystem: faster,
+      # and guaranteed to vanish with the container.
+      - /tmp/maec-uploads:size=2g,mode=1777
+    deploy:
+      resources:
+        limits:
+          cpus: "7.0"
+          memory: 12g
+        reservations:
+          memory: 1g
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: maec-frontend:latest
+    restart: unless-stopped
+    ports:
+      # The only port open to the world. Put a TLS terminator (Caddy,
+      # or nginx on the host with certbot) in front of this for HTTPS.
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [maec_net]
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512m
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+networks:
+  maec_net:
+    driver: bridge

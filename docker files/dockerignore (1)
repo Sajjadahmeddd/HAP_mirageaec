@@ -1,0 +1,48 @@
+# Repo-root build context (backend image). Everything excluded here never
+# reaches the Docker daemon, which keeps builds fast and the image small.
+
+.git
+.gitignore
+.github
+
+# The frontend is built by its own image — do not ship node_modules or the
+# React source into the backend.
+frontend/
+
+# Desktop app, tests and fixtures are not needed to serve the API.
+tests/
+test/
+**/tests/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Sample drawings and reports — often hundreds of MB, never needed at runtime.
+samples/
+fixtures/
+**/*.pdf
+**/*.xlsx
+**/*.csv
+!config/**/*.csv
+
+# Local env and secrets must never be baked into an image layer.
+.env
+.env.*
+!.env.example
+
+# Editor / OS noise
+.vscode/
+.idea/
+.DS_Store
+*.log
+venv/
+.venv/
+
+# Docs and build artefacts
+docs/
+*.md
+!README.md
+dist/
+build/

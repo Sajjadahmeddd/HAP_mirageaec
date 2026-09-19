@@ -28,6 +28,27 @@ from ..deps import MAX_UPLOAD_BYTES
 
 router = APIRouter(prefix="/api/rebadge", tags=["rebadge"])
 
+
+# These sheets' title blocks are set in Arial Narrow, but the rebadger writes
+# in Helvetica, which is wider -- so editor.py steps the size down a quarter
+# point at a time until the value fits, and says so. On this drawing set that
+# is not the exception, it is the normal path: every sheet reports it, every
+# time. The note tells an engineer nothing they can act on, it buried the two
+# warnings that DO matter, and 28 copies of it overflowed nginx's 4 KB header
+# buffer, which returned 502 on a batch the backend had already completed.
+#
+# Dropped here rather than in the engine, so the engine stays byte-identical.
+# This hides only the notification: the value is still shrunk to fit exactly
+# as before, and text that cannot fit even at the floor still raises
+# CellOverflowError in editor.py and fails that sheet properly.
+_COSMETIC = ("text reduced from",)
+
+
+def _worth_reporting(warnings: list[str]) -> list[str]:
+    """Warnings an engineer can act on. See _COSMETIC above."""
+    return [w for w in warnings if not any(c in w for c in _COSMETIC)]
+
+
 # These three routes are declared `def`, not `async def`, on purpose. Every one
 # of them spends seconds inside PyMuPDF, which is blocking C code. An `async`
 # route runs on the event loop itself, so that work stalls the entire worker —
@@ -123,7 +144,7 @@ def preview(file: UploadFile = File(...), payload: str = Form(...)):
     return Response(
         content=png,
         media_type="image/png",
-        headers={"X-Rebadge-Warnings": json.dumps(result.warnings)},
+        headers={"X-Rebadge-Warnings": json.dumps(_worth_reporting(result.warnings))},
     )
 
 
@@ -132,17 +153,22 @@ def _summary(batch) -> str:
 
     Only sheets with something to say are listed: on a 126-sheet set the
     counts carry the rest, and a header has to stay small enough to send.
+
+    warning_count is recomputed from the filtered warnings rather than taken
+    from the batch, so the Export screen's "N informational" always agrees
+    with the rows listed beneath it.
     """
+    kept = [(s, _worth_reporting(s.warnings)) for s in batch.sheets]
     return json.dumps({
         "total": len(batch.sheets),
         "ok_count": batch.ok_count,
         "error_count": batch.error_count,
-        "warning_count": batch.warning_count,
+        "warning_count": sum(len(w) for _, w in kept),
         "sheets": [
             {"filename": s.filename, "ok": s.ok,
              "previous_rev": s.previous_rev, "new_rev": s.new_rev,
-             "warnings": s.warnings, "errors": s.errors}
-            for s in batch.sheets if s.warnings or s.errors or not s.ok
+             "warnings": w, "errors": s.errors}
+            for s, w in kept if w or s.errors or not s.ok
         ],
     })
 

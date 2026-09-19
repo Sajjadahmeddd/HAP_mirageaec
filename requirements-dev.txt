@@ -1,0 +1,22 @@
+# Test-only dependencies.
+#
+#     pip install -r requirements-dev.txt
+#
+# Deliberately SEPARATE from backend/requirements.txt, which is what the
+# container image installs. Nothing here may enter the production image:
+# httpx is a test client, not a runtime dependency, and shipping it would
+# enlarge the image and widen its dependency surface for no benefit.
+#
+# Install this alongside backend/requirements.txt (the web service) or
+# ../requirements.txt (the desktop build), not instead of either.
+
+-r backend/requirements.txt
+
+pytest>=8.0
+
+# starlette.testclient imports httpx and raises RuntimeError at import time
+# without it. Absent it, tests/test_backend_api.py, test_backend_auth.py and
+# test_backend_headers.py cannot even be COLLECTED -- so the API, auth and
+# security-header tests silently do not run. Pinned in as of the Docker
+# migration, where those three surfaces are exactly what changes.
+httpx>=0.27

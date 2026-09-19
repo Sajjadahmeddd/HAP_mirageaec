@@ -14,7 +14,15 @@ services:
   - type: web
     name: maec
     runtime: python
-    plan: starter          # 512 MB is enough; a 350-page parse peaks well under it
+    # Instance-type slug, as the Compute page shows it. NOT a tier name:
+    # "starter" is legacy and no longer in the accepted list, so leaving it
+    # risks a blueprint sync resetting this service. 1c-2g = 1 CPU / 2 GB.
+    #
+    # Measured against a container capped at exactly this shape: a 40-sheet
+    # rebadge peaks at 356 MiB and a 60-sheet at 445 MiB, both well inside
+    # 2 GB. On the old 512 MB plan the dashboard showed memory passing 200%,
+    # which is consistent with the process being OOM-killed mid-batch.
+    plan: 1c-2g
     region: singapore      # nearest Render region to India; every upload
                            # crosses this distance. CANNOT be changed after
                            # the service is created — only by recreating it.

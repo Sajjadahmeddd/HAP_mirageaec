@@ -36,7 +36,7 @@ Everything below is configuration only.
 ```
 HAPExt_App/
 ├── docker-compose.yml               new
-├── docker-compose.override.yml      new, optional — laptop-sized limits
+├── docker-compose.override.yml.example  new, optional — local port only
 ├── .dockerignore                    new
 ├── .env.maec.example                new   (copy to .env.maec)
 ├── .gitattributes                   new   * text=auto eol=lf
@@ -95,9 +95,17 @@ docker compose up -d
 docker compose ps          # both services should reach "healthy"
 ```
 
-With `docker-compose.override.yml` present you get 2 workers on modest
-limits at **<http://localhost:8080>**; without it, the full production
-settings on port 80.
+The worker count is derived at startup, so there is nothing to tune for a
+laptop. The only local difference is the port: copy
+`docker-compose.override.yml.example` to `docker-compose.override.yml` to
+serve on **<http://localhost:8080>** instead of 80, which matters when IIS,
+http.sys or a system nginx already holds 80. Confirm the worker count from
+the startup log:
+
+```bash
+docker compose logs backend | head -1
+#  MAEC backend: 7 worker process(es) (auto-detected from 8 available CPU(s)), port 8000
+```
 
 ```bash
 docker compose logs -f
@@ -192,19 +200,20 @@ Only the host provisioning commands differ; `docker compose build` and
 
 ---
 
-## Tuning on 8 cores / 16 GB
+## Tuning
 
 | Setting | Where | Why |
 |---|---|---|
-| `WEB_CONCURRENCY=6` | `.env.maec` | Worker **processes**. MuPDF holds the GIL, so threads measure ~1.0× while processes scale. Six leaves headroom for nginx and the OS. |
+| `WEB_CONCURRENCY` *(unset)* | `.env.maec` | Normally left unset. The entrypoint reads the container's cgroup CPU quota — `nproc` reports the **host's** cores and ignores a `--cpus` limit — and starts `cores - 1` worker **processes**, floor 1. MuPDF holds the GIL, so threads measure ~1.0× while processes scale. Set it only to override deliberately. |
 | `proxy_read_timeout 900s` | `nginx.conf` | The setting Render never exposed. This is what was returning 502 on 40-sheet batches. |
 | `client_max_body_size 1G` | `nginx.conf` | nginx defaults to **1 MB**. Deliberately set above the app's own 200 MB per-file limit so FastAPI returns its explained error rather than a bare 413. |
 | `tmpfs /tmp/maec-uploads` | `docker-compose.yml` | Uploads in RAM: faster than the overlay filesystem, and they cannot outlive the container. |
-| `cpus: "7.0"`, `memory: 12g` | `docker-compose.yml` | Caps the backend so a runaway batch cannot starve nginx or the host. |
+| *(no resource limits)* | `docker-compose.yml` | Deliberately absent. On a single-purpose VM there is nothing to protect the app from, and a hardcoded figure is wrong on any box but the one it was written for. Commented-out stanza is there for the day this host runs other applications too. |
 
-Watch a real batch with `docker stats`. If CPU pins near 700% and requests
-queue, that is the ceiling — raise `WEB_CONCURRENCY` toward 8 only if
-memory allows (roughly 200 MB peak per concurrent parse).
+Watch a real batch with `docker stats`. If CPU pins near `(cores - 1) × 100%`
+and requests queue, that is the ceiling — raise `WEB_CONCURRENCY` above the
+detected value only if memory allows, at roughly 200 MB peak per concurrent
+parse.
 
 ---
 

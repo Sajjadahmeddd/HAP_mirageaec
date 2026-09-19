@@ -1,40 +1,25 @@
-# Laptop-sized overrides.  Copy to docker-compose.override.yml to use:
+# Optional local override. Copy to docker-compose.override.yml to use:
 #
 #     cp docker-compose.override.yml.example docker-compose.override.yml
 #
-# docker-compose.override.yml is gitignored ON PURPOSE. Compose loads it
-# automatically whenever it is present, so a committed copy would follow the
-# repository onto the VM and silently give production two workers on port
-# 8080 the first time someone forgot `-f docker-compose.yml`. Keeping it out
-# of git means the server clone simply has no override to forget about.
+# This file used to carry laptop-sized worker counts and resource limits.
+# It no longer needs to: the entrypoint derives the worker count from the
+# CPU available to the container, and the base compose file sets no limits
+# at all. All that is left is the port.
 #
-# With this in place:      http://localhost:8080   2 workers, 4 GB, 2 CPUs
-# Without it (production): http://localhost        6 workers, 12 GB, 7 CPUs
+# Why keep it: port 80 is frequently already held on a developer machine —
+# by IIS or http.sys on Windows, or by a system nginx on Linux — and the
+# resulting bind failure is easy to misread as a problem with the stack.
+# On the VM, port 80 is exactly what you want, which is why this file is
+# gitignored: a server clone has no override to inherit by forgetting -f.
+#
+# With this in place:      http://localhost:8080
+# Without it (and on VMs): http://localhost
 
 services:
-  backend:
-    environment:
-      # Two workers is enough to prove the multi-process path works — which
-      # is what Gate 8 is checking — without pinning a development machine.
-      # Overrides the value coming from .env.maec.
-      WEB_CONCURRENCY: "2"
-    deploy:
-      resources:
-        limits:
-          cpus: "2.0"
-          memory: 4g
-    tmpfs:
-      # 2g of RAM for uploads is a lot to give up on a laptop.
-      - /tmp/maec-uploads:size=512m,mode=1777
-
   frontend:
-    # `!override` REPLACES the base list. Without it Compose APPENDS to the
-    # ports list, and you would end up publishing 80 and 8080 at once — with
-    # 80 usually failing on a machine that already has something on it.
+    # `!override` REPLACES the base list. Without it Compose APPENDS, and
+    # you would publish 80 and 8080 at once — with 80 usually failing on
+    # the very machine this file exists to work around.
     ports: !override
       - "8080:80"
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 256m

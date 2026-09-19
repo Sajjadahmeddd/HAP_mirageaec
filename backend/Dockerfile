@@ -41,8 +41,12 @@ RUN useradd --create-home --uid 10001 maec \
 USER maec
 
 ENV TMPDIR=/tmp/maec-uploads \
-    PORT=8000 \
-    WEB_CONCURRENCY=6
+    PORT=8000
+
+# WEB_CONCURRENCY is deliberately NOT set here. The entrypoint derives it
+# from the container's cgroup CPU quota (falling back to nproc). Baking a
+# value in would make that variable always non-empty, so the detection
+# would never run and every host would get the hardcoded number.
 
 EXPOSE 8000
 

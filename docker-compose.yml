@@ -1,12 +1,9 @@
 # MAEC — two images, one origin. Replaces the single Render service.
 #
-# v2 changes after Gate 0:
-#   - env_file is .env.maec, NOT .env (the root .env belongs to MAEC One
-#     and carries that project's DATABASE_URL / SESSION_SECRET) (B2)
-#   - no ${...} interpolation of MAEC vars: compose interpolates from .env
-#     only, which is the wrong project's file. All config arrives via
-#     env_file, which compose passes straight to the container.
-#   - RENDER=1 set deliberately — see the comment on it below.
+# v3: hardware-agnostic. No hardcoded CPU or memory figures, so this file
+#     is correct on a 2-core laptop, a 4-core VM or a 16-core box without
+#     being edited. The backend derives its worker count from the CPU
+#     actually available to it at startup.
 
 name: maec
 
@@ -18,25 +15,24 @@ services:
     image: maec-backend:latest
     restart: unless-stopped
 
-    # Everything (MAEC_EMAIL / MAEC_PASSWORD / MAEC_SECRET_KEY /
-    # WEB_CONCURRENCY) comes from here. Never point this at .env.
+    # MAEC_EMAIL / MAEC_PASSWORD / MAEC_SECRET_KEY live here.
+    # Never point this at .env — that belongs to the MAEC One project.
     env_file: .env.maec
 
     environment:
       PORT: "8000"
 
+      # WEB_CONCURRENCY is deliberately NOT set. The entrypoint reads the
+      # container's cgroup CPU quota (or the visible core count) and uses
+      # cores-1 workers. Set it in .env.maec only to override that.
+
       # INTERIM WART — remove when the follow-up commit lands.
-      # main.py keys the Secure cookie flag and the HSTS header on the
-      # presence of RENDER. Unset here, the session cookie would ship
-      # without Secure and HSTS would be absent once Caddy fronts this.
-      # Setting it preserves both with zero application code change.
-      # FOLLOW-UP after Gate 9: rename that check to MAEC_HTTPS and delete
-      # this line — a future maintainer on a Netcup box should not find a
-      # variable called RENDER.
+      # main.py keys the Secure cookie flag and HSTS on the presence of
+      # RENDER. Setting it preserves both with zero code change.
+      # FOLLOW-UP: rename that check to MAEC_HTTPS and delete this line.
       RENDER: "1"
 
-      # MAEC_DEV is deliberately absent. Setting it enables the permissive
-      # CORS middleware intended only for the local Vite dev server.
+      # MAEC_DEV is deliberately absent — it enables permissive CORS.
 
     expose:
       - "8000"          # internal network only — never published to the host
@@ -44,16 +40,20 @@ services:
 
     tmpfs:
       # Uploads in RAM: faster than the overlay fs, and they cannot outlive
-      # the container. Enforces the stateless design at the infra layer.
-      - /tmp/maec-uploads:size=2g,mode=1777
+      # the container. 1 GB is ample — a large drawing set is tens of MB.
+      - /tmp/maec-uploads:size=1g,mode=1777
 
-    deploy:
-      resources:
-        limits:
-          cpus: "7.0"
-          memory: 12g
-        reservations:
-          memory: 1g
+    # No resource limits by default. On a single-purpose VM there is
+    # nothing to protect the app from, and a hardcoded "cpus: 7.0" is
+    # simply wrong on a 4-core box. Add limits only when this host starts
+    # running other applications alongside MAEC — then uncomment and set
+    # figures that match THAT machine:
+    #
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: "3.0"
+    #       memory: 4g
 
     logging:
       driver: json-file
@@ -73,11 +73,6 @@ services:
       backend:
         condition: service_healthy
     networks: [maec_net]
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 512m
     logging:
       driver: json-file
       options: { max-size: "20m", max-file: "5" }

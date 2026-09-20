@@ -32,7 +32,21 @@ COPY --from=build /src/dist /usr/share/nginx/html
 
 # Fail the BUILD on a malformed config, rather than discovering it when
 # the container will not start.
-RUN nginx -t
+# nginx resolves `upstream` server names when it PARSES the config, and the
+# service name "backend" has no DNS during a build -- so a bare `nginx -t`
+# fails with "host not found in upstream" on a config that is in fact
+# correct. (Patching /etc/hosts does not help: BuildKit mounts it read-only.)
+# So the check runs against a copy with the upstream pointed at loopback.
+# Everything else is the real thing -- same maec.conf, and the snippet
+# include is absolute so it still pulls the real security-headers.conf.
+# A syntax error anywhere still fails the build, which is the point.
+RUN mkdir -p /tmp/ngt/conf.d \
+ && sed 's#server backend:8000;#server 127.0.0.1:8000;#' \
+        /etc/nginx/conf.d/maec.conf > /tmp/ngt/conf.d/maec.conf \
+ && sed 's#/etc/nginx/conf.d/#/tmp/ngt/conf.d/#' \
+        /etc/nginx/nginx.conf > /tmp/ngt/nginx.conf \
+ && nginx -t -p /tmp/ngt -c /tmp/ngt/nginx.conf \
+ && rm -rf /tmp/ngt
 
 EXPOSE 80
 

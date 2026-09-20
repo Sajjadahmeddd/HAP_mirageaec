@@ -1,0 +1,82 @@
+# MAEC — two images, one origin. Replaces the single Render service.
+#
+# v3: hardware-agnostic. No hardcoded CPU or memory figures, so this file
+#     is correct on a 2-core laptop, a 4-core VM or a 16-core box without
+#     being edited. The backend derives its worker count from the CPU
+#     actually available to it at startup.
+
+name: maec
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: maec-backend:latest
+    restart: unless-stopped
+
+    # MAEC_EMAIL / MAEC_PASSWORD / MAEC_SECRET_KEY live here.
+    # Never point this at .env — that belongs to the MAEC One project.
+    env_file: .env.maec
+
+    environment:
+      PORT: "8000"
+
+      # WEB_CONCURRENCY is deliberately NOT set. The entrypoint reads the
+      # container's cgroup CPU quota (or the visible core count) and uses
+      # cores-1 workers. Set it in .env.maec only to override that.
+
+      # INTERIM WART — remove when the follow-up commit lands.
+      # main.py keys the Secure cookie flag and HSTS on the presence of
+      # RENDER. Setting it preserves both with zero code change.
+      # FOLLOW-UP: rename that check to MAEC_HTTPS and delete this line.
+      RENDER: "1"
+
+      # MAEC_DEV is deliberately absent — it enables permissive CORS.
+
+    expose:
+      - "8000"          # internal network only — never published to the host
+    networks: [maec_net]
+
+    tmpfs:
+      # Uploads in RAM: faster than the overlay fs, and they cannot outlive
+      # the container. 1 GB is ample — a large drawing set is tens of MB.
+      - /tmp/maec-uploads:size=1g,mode=1777
+
+    # No resource limits by default. On a single-purpose VM there is
+    # nothing to protect the app from, and a hardcoded "cpus: 7.0" is
+    # simply wrong on a 4-core box. Add limits only when this host starts
+    # running other applications alongside MAEC — then uncomment and set
+    # figures that match THAT machine:
+    #
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: "3.0"
+    #       memory: 4g
+
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: maec-frontend:latest
+    restart: unless-stopped
+    ports:
+      # The only port exposed. Put Caddy (or an ALB) in front for TLS and
+      # then firewall this off from the public internet.
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [maec_net]
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+networks:
+  maec_net:
+    driver: bridge

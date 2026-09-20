@@ -26,6 +26,14 @@ output/
 .env
 .env.*
 !.env.example
+# The container stack reads .env.maec (the root .env belongs to MAEC One).
+# The rule above hides .env.maec.example too, so re-include the template.
+!.env.maec.example
+
+# ---- Docker
+# Compose auto-loads this whenever it exists. Keeping it out of git means
+# a server clone cannot accidentally inherit laptop limits and port 8080.
+docker-compose.override.yml
 
 # ---- Incomplete asset transfers (re-save the source, don't commit a partial)
 design-references/*TRUNCATED*

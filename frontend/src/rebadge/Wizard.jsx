@@ -599,6 +599,17 @@ function Export({ state, onRestart, onHome }) {
   const failed = (summary?.sheets || []).filter((s) => !s.ok)
   const isZip = state.result?.name?.toLowerCase().endsWith('.zip')
 
+  // The per-sheet list travels in a response header, which has a hard size
+  // limit, so the server sends `truncated` when it could not fit them all.
+  // Without this the screen would show 19 skipped sheets while the tile
+  // beside it said 55 — the counts are right, but the engineer cannot see
+  // which sheets are missing, and skipped sheets are the ones that matter.
+  // error_count is a full count, so the shortfall in failures is exact;
+  // whatever remains of `truncated` belongs to the notes list.
+  const omitted = summary?.truncated || 0
+  const omittedFailed = Math.max(0, (summary?.error_count || 0) - failed.length)
+  const omittedNotes = Math.max(0, omitted - omittedFailed)
+
   return (
     <>
       <div className="split">
@@ -654,11 +665,20 @@ function Export({ state, onRestart, onHome }) {
                   </li>
                 ))}
               </ul>
+              {omittedNotes > 0 && (
+                <div className="small" style={{ marginTop: 6 }}>
+                  …and {omittedNotes} more sheet(s) with notes are not listed here.
+                  Run the set in smaller batches to see every one.
+                </div>
+              )}
             </div>
           )}
           {failed.length > 0 && (
             <div className="banner-fail">
-              <strong>Skipped</strong>
+              <strong>
+                Skipped
+                {omittedFailed > 0 && ` — showing ${failed.length} of ${summary.error_count}`}
+              </strong>
               <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
                 {failed.map((s) => (
                   <li key={s.filename} className="small">
@@ -666,6 +686,14 @@ function Export({ state, onRestart, onHome }) {
                   </li>
                 ))}
               </ul>
+              {omittedFailed > 0 && (
+                <div className="small" style={{ marginTop: 6 }}>
+                  …and {omittedFailed} more sheet(s) could not be edited, but would
+                  not fit in this report. Run the set in smaller batches to see
+                  every one — no sheet was silently skipped, and the count above
+                  is complete.
+                </div>
+              )}
             </div>
           )}
         </div>

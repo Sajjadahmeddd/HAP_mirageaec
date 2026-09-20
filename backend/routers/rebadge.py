@@ -148,6 +148,23 @@ def preview(file: UploadFile = File(...), payload: str = Form(...)):
     )
 
 
+# A response header block must fit in ONE proxy buffer, and the default is a
+# single memory page -- 4096 bytes. frontend/nginx.conf raises ours to 16k,
+# but that only helps where we own the proxy; this app also runs on Render,
+# where we do not. So the bound belongs here as well.
+#
+# Bounded by BYTES, not entry count. "Cap it at 20 sheets" bounds nothing:
+# measured on real batches, one entry is 165 B for a rejected sheet but 323 B
+# for one carrying warnings, so twenty of the latter is 6.5 KB -- still over
+# the 4 KB default. A byte budget holds whatever the messages turn out to be.
+#
+# 3000 B leaves room for the JSON envelope plus the ordinary headers
+# (Content-Disposition, ETag, CSP and the rest) inside 4096, and gives better
+# than 5x margin against the 16k nginx now allows.
+_SUMMARY_BUDGET = 3000
+_SUMMARY_MAX_SHEETS = 20
+
+
 def _summary(batch) -> str:
     """A compact result summary for the response header.
 
@@ -157,19 +174,42 @@ def _summary(batch) -> str:
     warning_count is recomputed from the filtered warnings rather than taken
     from the batch, so the Export screen's "N informational" always agrees
     with the rows listed beneath it.
+
+    The list was previously unbounded, which made the ERROR path the overflow
+    path: the header grew largest exactly when something was wrong, so a batch
+    of sheets that all failed would 502 instead of reporting which failed and
+    why. Failed sheets are therefore emitted FIRST, and `truncated` says how
+    many notable sheets did not fit. error_count and warning_count stay full
+    counts, so the Export screen's totals remain correct either way.
     """
     kept = [(s, _worth_reporting(s.warnings)) for s in batch.sheets]
+    notable = [(s, w) for s, w in kept if w or s.errors or not s.ok]
+    # False sorts before True, so failures lead; the sort is stable, so the
+    # original sheet order survives within each group.
+    notable.sort(key=lambda pair: pair[0].ok)
+
+    entries: list[dict] = []
+    used = 0
+    for sheet, warnings in notable:
+        entry = {"filename": sheet.filename, "ok": sheet.ok,
+                 "previous_rev": sheet.previous_rev, "new_rev": sheet.new_rev,
+                 "warnings": warnings, "errors": sheet.errors}
+        size = len(json.dumps(entry)) + 1          # +1 for the separating comma
+        # Always emit at least one, so a single verbose entry is reported
+        # rather than silently dropped.
+        if entries and (used + size > _SUMMARY_BUDGET
+                        or len(entries) >= _SUMMARY_MAX_SHEETS):
+            break
+        entries.append(entry)
+        used += size
+
     return json.dumps({
         "total": len(batch.sheets),
         "ok_count": batch.ok_count,
         "error_count": batch.error_count,
         "warning_count": sum(len(w) for _, w in kept),
-        "sheets": [
-            {"filename": s.filename, "ok": s.ok,
-             "previous_rev": s.previous_rev, "new_rev": s.new_rev,
-             "warnings": w, "errors": s.errors}
-            for s, w in kept if w or s.errors or not s.ok
-        ],
+        "sheets": entries,
+        "truncated": len(notable) - len(entries),
     })
 
 

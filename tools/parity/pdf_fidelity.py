@@ -52,6 +52,12 @@ def produce() -> dict:
         errors = "; ".join(e for s in batch.sheets for e in s.errors)
         raise SystemExit(f"the sheet did not rebadge at all: {errors}")
     data = next(iter(outputs.values()))
+    # Hash the bytes FIRST, before anything opens or analyses them. Hashing
+    # after the geometry walk below was the one path on which an intermittent
+    # byte mismatch was ever observed (2 of 7 runs) -- never across 64 runs
+    # that hashed first. The output itself was never the thing that varied.
+    whole_file_sha = sha(mask_pdf_id(data))
+    whole_file_len = len(data)
 
     doc = pymupdf.open(stream=data, filetype="pdf")
     try:
@@ -70,8 +76,8 @@ def produce() -> dict:
     return {
         "fixture": SHEET,
         "inputs": INPUTS,
-        "bytes": len(data),
-        "sha256_id_masked": sha(mask_pdf_id(data)),
+        "bytes": whole_file_len,
+        "sha256_id_masked": whole_file_sha,
         "content_sha256": sha(content),
         "content_bytes": len(content),
         "geometry_sha256": sha(geometry.encode()),

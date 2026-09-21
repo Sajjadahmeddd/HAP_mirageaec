@@ -59,7 +59,11 @@ jobs:
       # Done here rather than in conftest.py, which would leave a blank stub
       # in the working tree for the next local `python -m backend.main`.
       - run: mkdir -p frontend/dist/assets && echo '<!doctype html><title>MAEC</title>' > frontend/dist/index.html
-      - run: python -m pytest -q
+      # -rs prints the REASON for every skip in the summary. Without it CI
+      # reports a bare "1 skipped" for a module holding 23 desktop tests, and
+      # a reader cannot tell what is missing -- silent non-collection is how
+      # three whole modules once went unrun unnoticed.
+      - run: python -m pytest -q -rs
 
   frontend:
     runs-on: ubuntu-latest

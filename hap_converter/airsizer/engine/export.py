@@ -18,7 +18,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from hap_converter.engine.xlsx_exporter import write_project_header
+from hap_converter.engine.xlsx_exporter import keep_as_text, write_project_header
 from hap_converter.engine.exporter import versioned_path
 
 from .config import Config, ResultColumn
@@ -167,7 +167,7 @@ def write_xlsx(
         title.font = Font(bold=True, size=14)
         title.alignment = _left
         if project_name:
-            subtitle = sheet.cell(row=2, column=1, value=project_name)
+            subtitle = keep_as_text(sheet.cell(row=2, column=1, value=project_name))
             subtitle.font = Font(size=10, color="666666")
         header_row = 4
     header_fill = PatternFill("solid", fgColor=NAVY)
@@ -184,7 +184,7 @@ def write_xlsx(
     for offset, (space, values) in enumerate(zip(spaces, rows), start=header_row + 1):
         state = row_state(space, results.get(space.row))
         for index, value in enumerate(values, start=1):
-            cell = sheet.cell(row=offset, column=index, value=value)
+            cell = keep_as_text(sheet.cell(row=offset, column=index, value=value))
             cell.border = _border
             cell.alignment = _indented if (index == 1 and not space.is_unit) else _left
             if state == "interpolated":

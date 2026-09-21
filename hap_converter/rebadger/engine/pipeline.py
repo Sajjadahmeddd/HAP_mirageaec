@@ -26,8 +26,20 @@ _LABELS = ("PROJECT STAGE", "SHEET STATUS", "REV",
 
 def _open(source: str | Path | bytes) -> pymupdf.Document:
     if isinstance(source, bytes):
-        return pymupdf.open(stream=source, filetype="pdf")
-    return pymupdf.open(source)
+        doc = pymupdf.open(stream=source, filetype="pdf")
+    else:
+        doc = pymupdf.open(source)
+    # PyMuPDF opens a password-protected file without complaint and fails
+    # only on the first page access -- which escaped the callers' handlers
+    # as an unhandled 500. Raising here lets check() and rebadge() report it
+    # like any other unreadable sheet. needs_pass, not is_encrypted: a file
+    # with only an owner password ("printing disabled") opens and reads
+    # normally and must keep working. It is a property read, so an ordinary
+    # drawing pays nothing for it.
+    if doc.needs_pass:
+        doc.close()
+        raise ValueError("password-protected — remove the password and re-upload")
+    return doc
 
 
 def _labels_found(page: pymupdf.Page) -> dict[str, bool]:

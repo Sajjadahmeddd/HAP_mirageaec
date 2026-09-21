@@ -75,11 +75,21 @@ if [ -z "${MAEC_SECRET_KEY:-}" ] || \
     exit 1
 fi
 
-# --- warn if the gate is running on fallback credentials ---------------
+# --- refuse to start without a usable password --------------------------
+# There is no fallback password any more. The app itself refuses to start in
+# this state; failing here as well turns it into one clear line at the top of
+# the container log instead of a traceback further down.
 if [ -z "${MAEC_PASSWORD:-}" ]; then
-    echo "WARNING: MAEC_PASSWORD is unset — the app will use the fallback" >&2
-    echo "         password committed in backend/auth.py, which is readable" >&2
-    echo "         by anyone with repository access. Set it in .env.maec." >&2
+    echo "FATAL: MAEC_PASSWORD is unset. There is no built-in password to" >&2
+    echo "       fall back on, so the app cannot start." >&2
+    echo "       Set MAEC_PASSWORD in .env.maec to at least 8 characters." >&2
+    exit 1
+fi
+
+if [ "${#MAEC_PASSWORD}" -lt 8 ]; then
+    echo "FATAL: MAEC_PASSWORD is ${#MAEC_PASSWORD} characters." >&2
+    echo "       It must be at least 8. Set a longer one in .env.maec." >&2
+    exit 1
 fi
 
 # --- refuse to start with dev CORS enabled ------------------------------

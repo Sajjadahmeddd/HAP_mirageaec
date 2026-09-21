@@ -74,7 +74,7 @@ So this stack reads `.env.maec`, and nothing here ever touches `.env`.
 cp .env.maec.example .env.maec
 chmod 600 .env.maec
 python3 -c "import secrets; print(secrets.token_urlsafe(48))"   # → MAEC_SECRET_KEY
-nano .env.maec                                                   # set MAEC_PASSWORD too
+nano .env.maec                          # set MAEC_PASSWORD too (min 8 chars)
 ```
 
 **`MAEC_SECRET_KEY` is mandatory, not tuning.** `auth.py` falls back to a

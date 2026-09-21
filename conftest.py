@@ -14,12 +14,20 @@ The real report + reference Excel live in tests/fixtures/ (see
 tests/test_real_report.py, skipped when absent).
 """
 
+import os
 from pathlib import Path
 
 import pymupdf
 import pytest
 
 from hap_converter.engine import config as config_mod
+
+# The app has no built-in password and refuses to start without a usable one,
+# so the suite supplies its own before anything imports `backend.main`.
+# setdefault, not a plain assignment: CI sets its own value, and a developer
+# exporting a real one locally should not have it silently replaced. It is
+# nine characters, which clears auth.MIN_PASSWORD_LENGTH.
+os.environ.setdefault("MAEC_PASSWORD", "test-only")
 
 CONFIG_PATH = Path(__file__).parent / "config" / "mapping.json"
 

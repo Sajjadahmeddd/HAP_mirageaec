@@ -36,9 +36,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      # The app will require MAEC_PASSWORD once the committed fallback is
-      # removed. This is a test fixture, not a credential -- it protects
-      # nothing, and it is safe in a public file.
+      # The app requires MAEC_PASSWORD and refuses to start without one, so
+      # the test job supplies it. This is a test fixture, not a credential --
+      # it protects nothing, and it is safe in a public file.
       MAEC_PASSWORD: ci-test-fixture-not-a-secret
     steps:
       - uses: actions/checkout@v7

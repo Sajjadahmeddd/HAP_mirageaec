@@ -292,7 +292,8 @@ def test_a_batch_produces_one_output_per_sheet_and_skips_what_it_cannot_do():
     assert batch.ok_count == len(SAMPLES)
     assert batch.error_count == 1
     assert len(outputs) == len(SAMPLES)
-    assert all(name.endswith("_rebadged.pdf") for name in outputs)
+    # Outputs keep the source name (92f0d83 dropped the "_rebadged" tag).
+    assert sorted(outputs) == sorted(Path(p).name for p in SAMPLES)
 
     skipped = next(s for s in batch.sheets if not s.ok)
     assert skipped.filename == "broken.pdf"
@@ -303,7 +304,7 @@ def test_a_name_collision_inside_a_batch_is_versioned():
     data = Path(SAMPLES[0]).read_bytes()
     outputs, batch = pipeline.rebadge_batch([("sheet.pdf", data), ("sheet.pdf", data)],
                                             INPUTS)
-    assert sorted(outputs) == ["sheet_rebadged.pdf", "sheet_rebadged_v2.pdf"]
+    assert sorted(outputs) == ["sheet.pdf", "sheet_v2.pdf"]
     assert batch.ok_count == 2
 
 

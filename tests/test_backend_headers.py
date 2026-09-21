@@ -8,6 +8,7 @@ something it should not do less damage.
 import pytest
 from fastapi.testclient import TestClient
 
+from backend import auth
 from backend.main import CSP, SECURITY_HEADERS, app
 
 
@@ -61,6 +62,9 @@ def test_headers_do_not_gate_anything(client):
     assert client.get("/api/health").status_code == 200
     assert client.get("/").status_code == 200
     signed_in = TestClient(app)
+    # Sign in with whatever credentials are in force, not a literal. This
+    # test needs a session; it is not testing the fallback password, and a
+    # hardcoded one broke the moment CI set MAEC_PASSWORD.
     signed_in.post("/api/auth/login",
-                   json={"email": "mirageaec@mirage.com", "password": "hapext"})
+                   json={"email": auth.email(), "password": auth.password()})
     assert signed_in.get("/api/airsizer/config").status_code == 200

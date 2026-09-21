@@ -52,6 +52,13 @@ jobs:
       # requirements-dev.txt begins with -r backend/requirements.txt, so this
       # installs exactly the pinned production set plus pytest and httpx.
       - run: pip install -r requirements-dev.txt
+      # main.py registers the SPA route only if frontend/dist exists. It is
+      # gitignored and built by render.yaml in production, and the frontend
+      # job below proves the real bundle builds. The auth and header tests
+      # only need the backend to serve *a* shell, so a stub is enough.
+      # Done here rather than in conftest.py, which would leave a blank stub
+      # in the working tree for the next local `python -m backend.main`.
+      - run: mkdir -p frontend/dist/assets && echo '<!doctype html><title>MAEC</title>' > frontend/dist/index.html
       - run: python -m pytest -q
 
   frontend:

@@ -28,7 +28,7 @@ from hap_converter.engine import change_request, exporter, pipeline
 from hap_converter.engine.synthesizer import LOGO_KEY, PROJECT_FIELDS, build_project_header
 from hap_converter.engine.xlsx_exporter import write_fcu_xlsx
 
-from ..deps import hapext_config, save_upload, workspace
+from ..deps import hapext_config, safe_base_name, save_upload, workspace
 
 router = APIRouter(prefix="/api/hapext", tags=["hapext"])
 
@@ -115,7 +115,8 @@ async def download(
     rows = [[str(c) for c in row] for row in data.get("rows", [])]
     if not header or not rows:
         raise HTTPException(status_code=400, detail="Nothing to download.")
-    base_name = str(data.get("base_name") or "schedule")
+    # Client-supplied and becomes the output file's name -- never a path.
+    base_name = safe_base_name(data.get("base_name"), "schedule")
 
     config = hapext_config()
     scratch = Path(tempfile.mkdtemp(prefix="maec_dl_"))

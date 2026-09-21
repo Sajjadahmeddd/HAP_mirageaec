@@ -25,7 +25,7 @@ from hap_converter.airsizer.engine import export, pipeline
 from hap_converter.airsizer.engine.models import SizingInput, Space
 
 from hap_converter.engine.project_header import read_project_header
-from ..deps import CONFIG_DIR, airsizer_config, save_upload, workspace
+from ..deps import CONFIG_DIR, airsizer_config, safe_base_name, save_upload, workspace
 
 router = APIRouter(prefix="/api/airsizer", tags=["airsizer"])
 
@@ -258,7 +258,8 @@ async def export_route(payload: str = Form(...)):
 
     visible = data.get("visible_columns")
     columns = export.visible_columns(config, visible if visible is not None else None)
-    base_name = str(data.get("base_name") or "air_diffuser_sizing")
+    # Client-supplied and becomes the output file's name -- never a path.
+    base_name = safe_base_name(data.get("base_name"), "air_diffuser_sizing")
 
     scratch = Path(tempfile.mkdtemp(prefix="maec_air_"))
     try:

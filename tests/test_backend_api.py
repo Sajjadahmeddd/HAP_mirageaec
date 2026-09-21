@@ -516,3 +516,29 @@ def test_download_base_name_cannot_write_outside_its_scratch_directory(client, h
     assert response.status_code == 200
     assert 'filename="escaped.csv"' in response.headers["content-disposition"]
     assert set(temp.glob("escaped*")) == before
+
+
+def test_a_failed_parse_reports_the_file_name_not_the_server_path(client, sample_pdf, tmp_path):
+    # The engine quotes the path it was handed; that is a server scratch path
+    # and must not reach the browser. Both routes that return issues are hit.
+    import tempfile
+
+    unreadable = ("drawing.pdf", b"this is not a pdf", "application/pdf")
+    body = _convert(client, sample_pdf)
+    logo_path = Path(__file__).resolve().parents[1] / "company logo.png"
+    workbook = _schedule_workbook(body["header"], body["rows"], logo_path, tmp_path)
+
+    responses = [
+        client.post("/api/hapext/convert", files={"pdf": unreadable}).json(),
+        client.post(
+            "/api/hapext/change-request",
+            files={"xlsx": ("previous.xlsx", workbook.read_bytes(), XLSX_MIME), "pdf": unreadable},
+        ).json(),
+    ]
+    temp = str(Path(tempfile.gettempdir()))
+    for result in responses:
+        assert result["ok"] is False
+        description = result["issues"][0]["description"]
+        assert "'drawing.pdf'" in description
+        assert "maec_" not in description
+        assert temp not in description and temp.replace("\\", "\\\\") not in description

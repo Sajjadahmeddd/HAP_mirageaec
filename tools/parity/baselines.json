@@ -1,0 +1,42 @@
+{
+  "csv": {
+    "fixture": "tests/fixtures/System Design.pdf",
+    "sha256": "66d1cad48d837fb0aa084ea52538b0cbd4415f98b553c8f704cdadf423b0ca5b",
+    "bytes": 43018,
+    "rows": 813,
+    "unit_rows": 212,
+    "space_rows": 601,
+    "engine": {
+      "python": "3.14.7",
+      "pymupdf": "1.28.2",
+      "openpyxl": "3.1.5",
+      "pillow": "12.3.0"
+    }
+  },
+  "rebadge": {
+    "fixture": "PDF_Rebadging failures/00044-DHCGP-MRG-PL1-BD1-DWG-ELE-1101.pdf",
+    "inputs": {
+      "project_stage": "TENDER DOCUMENTATION",
+      "sheet_status": "FOR INFORMATION",
+      "rev": "0",
+      "description": "ISSUED FOR TENDER",
+      "date": "19 SEP 2026",
+      "approved_by": "SAJJAD"
+    },
+    "bytes": 3142678,
+    "sha256_id_masked": "681ee8c5659ebd328b311efcaf2c978f382061e2a429e88a9dfeb517bf8219e3",
+    "content_sha256": "d266b84eb2a1d4ce2873b4f225524b8c6679b90d62dc2356c6d7390f9701456a",
+    "content_bytes": 12834694,
+    "geometry_sha256": "429f4070f450ba8bb3e11949adbbe9976fa6a4233d9ed8fd6129827531207adb",
+    "words": 300,
+    "text_sha256": "1ccb158ae01ffe5a87f43beb1e9fe15faa98ff4211c24fb5b0ca1e37fb083db1",
+    "ok_count": 1,
+    "error_count": 0,
+    "engine": {
+      "python": "3.14.7",
+      "pymupdf": "1.28.2",
+      "openpyxl": "3.1.5",
+      "pillow": "12.3.0"
+    }
+  }
+}

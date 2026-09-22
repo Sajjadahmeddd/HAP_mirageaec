@@ -29,6 +29,24 @@ from hap_converter.engine import config as config_mod
 # nine characters, which clears auth.MIN_PASSWORD_LENGTH.
 os.environ.setdefault("MAEC_PASSWORD", "test-only")
 
+# The suite runs against a known environment, not whatever the machine running
+# it exports. Each variable below was exported on its own against the backend
+# tests: MAEC_EMAIL broke 3 (the default address no longer signs in),
+# MAEC_DISPLAY_NAME broke 1 (the greeting changes), and RENDER broke 42 -- it
+# turns on the Secure cookie flag, which the plain-HTTP test client never sends
+# back, so no session survives. docker-compose.yml sets RENDER=1, so running the
+# suite inside the container would hit exactly that. MAEC_DEV and
+# MAEC_SECRET_KEY broke nothing today and are cleared anyway, so no future test
+# inherits them by accident.
+#
+# This must happen here, at import, not in a monkeypatch.delenv fixture:
+# backend/main.py reads RENDER once, when it is imported during collection, to
+# set https_only on the session cookie. A per-test fixture runs too late to
+# change that. Tests that need one of these set it themselves with setenv.
+for _machine_variable in ("MAEC_EMAIL", "MAEC_DISPLAY_NAME", "RENDER",
+                          "MAEC_DEV", "MAEC_SECRET_KEY"):
+    os.environ.pop(_machine_variable, None)
+
 CONFIG_PATH = Path(__file__).parent / "config" / "mapping.json"
 
 COVER_PAGE = [

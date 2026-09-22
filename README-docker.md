@@ -371,12 +371,38 @@ API and the HTML document will disagree.
    move. After the VM deployment is green, rename it to something honest
    (`MAEC_HTTPS`) and delete the compose line — a future maintainer on a
    Netcup box should not find a variable called `RENDER`.
-2. **Two failing rebadge tests.** Pre-existing, from commit 975f9d4
-   (`sheet_rebadged.pdf` → `sheet.pdf`). Unrelated to Docker; own ticket.
-3. **`httpx` is missing**, so `test_backend_api`, `test_backend_auth` and
-   `test_backend_headers` cannot collect — the API, auth and header tests
-   are not running at all. Add it to a dev/test requirements file, **not**
-   `backend/requirements.txt` (it must not enter the production image).
+2. ~~**Two failing rebadge tests.**~~ *Resolved in b6435c9* — the stale
+   assertions now expect the source file name.
+3. ~~**`httpx` is missing.**~~ *Resolved in 21b38cc* — it lives in
+   `requirements-dev.txt`, outside the production image.
+4. **AirSizer export fails when the schedule carries a large logo.**
+   **Priority: high — a live, user-facing break.** Exporting after loading
+   a HAPExt schedule that embeds the 1.23 MB company logo returns 400,
+   `Field exceeded maximum size of 1024KB`. Starlette caps every
+   *non-file* multipart field at 1 MB, and the browser sends the logo back
+   as a base64 data URL (~1.46 MB) inside the `payload` text field.
+   Pre-existing: `main` fails identically, so it is not a security-merge
+   regression.
+
+   Two ways to fix it, which are not equivalent:
+   - **Send the logo as a file part**, as `/api/hapext/download` already
+     does. File parts spool to disk and are not subject to that cap, so
+     no limit changes. Preferred.
+   - **Raise the field cap** for that route. That changes how requests are
+     parsed and how much is buffered in memory per field, so it needs its
+     own load testing.
+
+   Either way it gets its own testing cycle, not a ride on another change.
+   Verify with the end-to-end harness's `air_export_with_logo` case: 400
+   today (the positive control), 200 with the logo embedded once fixed.
+5. **An interrupted download can leave a scratch folder behind.**
+   **Priority: low.** Downloads stream from a scratch folder (`maec_dl_*`,
+   `maec_air_*`, `maec_rebadge_*`) that a background task deletes once the
+   response finishes. If the browser disconnects first, that task may not
+   run, and the folder stays in the temp directory. Flagged in the Step 2
+   review; not reproduced yet. The main cost is disk, but the folder also
+   keeps a copy of that output on the server until the next restart —
+   worth closing for client drawings, even though nothing serves it.
 
 ---
 

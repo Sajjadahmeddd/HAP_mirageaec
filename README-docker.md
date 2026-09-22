@@ -164,8 +164,10 @@ Rollback is `git checkout <previous-commit>` and the same two commands.
 
 ## HTTPS — required before sharing the URL
 
-The stack publishes plain HTTP on :80. These are client drawings; do not
-expose that directly. Caddy on the host handles certificates automatically:
+The stack publishes plain HTTP on :80, **bound to 127.0.0.1** — so it is
+reachable from the host itself and from nothing else. These are client
+drawings; do not expose that directly. Caddy on the host handles
+certificates automatically:
 
 ```
 # /etc/caddy/Caddyfile
@@ -174,7 +176,11 @@ engineeringtools.mirageaec.com {
 }
 ```
 
-Then firewall :80 to localhost and let Caddy own :443.
+Caddy then owns :443. The loopback bind in `docker-compose.yml` is what
+keeps :80 private, and it matters more than a firewall rule here: Docker
+publishes ports through DNAT rules that are evaluated *before* ufw's, so a
+port published as `80:80` stays reachable from the internet while `ufw
+status` still reads "deny". Keep the `127.0.0.1:` prefix on that line.
 
 **One ordering trap:** `RENDER=1` is set in compose so the session cookie
 keeps its `Secure` flag and HSTS stays on. Browsers refuse `Secure` cookies

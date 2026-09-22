@@ -22,4 +22,4 @@ services:
     # you would publish 80 and 8080 at once — with 80 usually failing on
     # the very machine this file exists to work around.
     ports: !override
-      - "8080:80"
+      - "127.0.0.1:8080:80"

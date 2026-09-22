@@ -66,9 +66,14 @@ services:
     image: maec-frontend:latest
     restart: unless-stopped
     ports:
-      # The only port exposed. Put Caddy (or an ALB) in front for TLS and
-      # then firewall this off from the public internet.
-      - "80:80"
+      # The only port exposed, and bound to the loopback interface rather
+      # than every interface. Docker publishes ports by writing DNAT rules
+      # that sit in front of the host firewall, so a plain "80:80" is
+      # reachable from the internet even with ufw denying it -- a trap
+      # people usually find out about from their logs. The reverse proxy
+      # that terminates TLS runs on the same host and reaches this through
+      # loopback; nothing else needs to.
+      - "127.0.0.1:80:80"
     depends_on:
       backend:
         condition: service_healthy

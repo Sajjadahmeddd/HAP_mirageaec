@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import csv
 import json
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -28,7 +29,7 @@ from hap_converter.engine import change_request, exporter, pipeline
 from hap_converter.engine.synthesizer import LOGO_KEY, PROJECT_FIELDS, build_project_header
 from hap_converter.engine.xlsx_exporter import write_fcu_xlsx
 
-from ..deps import hapext_config, save_upload, workspace
+from ..deps import hapext_config, safe_base_name, save_upload, workspace
 
 router = APIRouter(prefix="/api/hapext", tags=["hapext"])
 
@@ -37,9 +38,22 @@ router = APIRouter(prefix="/api/hapext", tags=["hapext"])
 LOGO_SUFFIXES = (".png", ".jpg", ".jpeg")
 
 
-def _issues(result) -> list[dict]:
+def _issues(result, scratch: Path) -> list[dict]:
+    # The engine was handed a scratch path, and some of its messages quote it
+    # back ("Failed to open file '/tmp/maec_x/drawing.pdf'"). The browser only
+    # needs the file's own name; the server's directory layout stays here.
+    # MuPDF escapes backslashes when it quotes a path, so on Windows the
+    # prefix appears doubled; both spellings are removed.
+    prefix = str(scratch) + os.sep
+    prefixes = {prefix, prefix.replace("\\", "\\\\")}
+
+    def redact(text: str) -> str:
+        for p in prefixes:
+            text = text.replace(p, "")
+        return text
+
     return [
-        {"page": issue.page, "field": issue.field, "description": issue.description}
+        {"page": issue.page, "field": issue.field, "description": redact(issue.description)}
         for issue in result.issues
     ]
 
@@ -60,7 +74,7 @@ async def convert(pdf: UploadFile = File(...)):
                 status_code=200,
                 content={
                     "ok": False,
-                    "issues": _issues(result),
+                    "issues": _issues(result, scratch),
                     "stats": result.stats,
                     "source": pdf_path.name,
                 },
@@ -115,7 +129,8 @@ async def download(
     rows = [[str(c) for c in row] for row in data.get("rows", [])]
     if not header or not rows:
         raise HTTPException(status_code=400, detail="Nothing to download.")
-    base_name = str(data.get("base_name") or "schedule")
+    # Client-supplied and becomes the output file's name -- never a path.
+    base_name = safe_base_name(data.get("base_name"), "schedule")
 
     config = hapext_config()
     scratch = Path(tempfile.mkdtemp(prefix="maec_dl_"))
@@ -175,7 +190,7 @@ async def change_request_route(
         if not result.ok:
             return {
                 "ok": False,
-                "issues": _issues(result),
+                "issues": _issues(result, scratch),
                 "stats": result.stats,
                 "source": pdf_path.name,
             }

@@ -13,6 +13,16 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+# These drive the PySide6 desktop app, which is not what CI deploys: Render
+# and the container run the web service, and backend/requirements.txt has no
+# Qt. Skip rather than fail where PySide6 is absent, so a web-only install
+# collects cleanly. They still run wherever the desktop requirements are.
+pytest.importorskip(
+    "PySide6",
+    reason="desktop UI module (all tests in test_airsizer_ui.py) skipped: "
+           "PySide6 is not installed -- expected in web-only CI",
+)
+
 from PySide6.QtWidgets import QApplication, QPushButton  # noqa: E402
 
 from hap_converter.airsizer.ui.sizing_dialog import (  # noqa: E402

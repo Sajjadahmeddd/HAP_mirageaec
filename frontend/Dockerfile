@@ -7,7 +7,9 @@
 #     that would apply the headers globally and duplicate them on /api/.
 
 # ---- stage 1: build the bundle ---------------------------------------
-FROM node:20-alpine AS build
+# Node 22 LTS. Node 20 reached end of life in April 2026. Build-time only:
+# nothing from this stage reaches the browser, which gets static files.
+FROM node:22-alpine AS build
 WORKDIR /src
 
 # Cached until the lockfile changes

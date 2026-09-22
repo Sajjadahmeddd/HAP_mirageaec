@@ -74,7 +74,7 @@ So this stack reads `.env.maec`, and nothing here ever touches `.env`.
 cp .env.maec.example .env.maec
 chmod 600 .env.maec
 python3 -c "import secrets; print(secrets.token_urlsafe(48))"   # → MAEC_SECRET_KEY
-nano .env.maec                                                   # set MAEC_PASSWORD too
+nano .env.maec                          # set MAEC_PASSWORD too (min 8 chars)
 ```
 
 **`MAEC_SECRET_KEY` is mandatory, not tuning.** `auth.py` falls back to a
@@ -164,8 +164,10 @@ Rollback is `git checkout <previous-commit>` and the same two commands.
 
 ## HTTPS — required before sharing the URL
 
-The stack publishes plain HTTP on :80. These are client drawings; do not
-expose that directly. Caddy on the host handles certificates automatically:
+The stack publishes plain HTTP on :80, **bound to 127.0.0.1** — so it is
+reachable from the host itself and from nothing else. These are client
+drawings; do not expose that directly. Caddy on the host handles
+certificates automatically:
 
 ```
 # /etc/caddy/Caddyfile
@@ -174,7 +176,11 @@ engineeringtools.mirageaec.com {
 }
 ```
 
-Then firewall :80 to localhost and let Caddy own :443.
+Caddy then owns :443. The loopback bind in `docker-compose.yml` is what
+keeps :80 private, and it matters more than a firewall rule here: Docker
+publishes ports through DNAT rules that are evaluated *before* ufw's, so a
+port published as `80:80` stays reachable from the internet while `ufw
+status` still reads "deny". Keep the `127.0.0.1:` prefix on that line.
 
 **One ordering trap:** `RENDER=1` is set in compose so the session cookie
 keeps its `Secure` flag and HSTS stays on. Browsers refuse `Secure` cookies
@@ -182,6 +188,129 @@ over plain HTTP on anything other than `localhost` — so on the VM, sign-in
 will fail over `http://<raw-ip>` until Caddy is in front. Either bring up
 HTTPS in the same session, or drop `RENDER` for the first smoke test and
 restore it before anyone else gets the URL.
+
+---
+
+## VM day — the traps, and how to prove you avoided them
+
+Every check here comes in two halves: the result you want, and a deliberate
+demonstration that the check is capable of producing the other result. A
+check that can only pass is not a check. A refused connection proves nothing
+on its own — a typo in the address gives you the same refusal, and so does a
+host that is simply down. Watch the test fail once, on purpose, and its pass
+starts meaning something.
+
+### Trap 1 — Docker publishes ports *past* your firewall
+
+`ufw` is not what keeps :80 private. Docker publishes a port by writing DNAT
+rules into the `DOCKER` chain, and those are evaluated **before** the `ufw`
+rules. A port published as `80:80` is reachable from the internet while `ufw
+status` still reads `deny 80`. This surprises people who did everything
+right, and they usually discover it from their access logs.
+
+What closes it is the bind address in `docker-compose.yml`:
+
+```yaml
+ports:
+  - "127.0.0.1:80:80"     # not "80:80"
+```
+
+**Prove it, both ways.** From another machine on the network (or any host
+that is not the VM), with `VM` set to the VM's address:
+
+```bash
+# 1. the real stack, bound to loopback: must NOT answer
+curl -s -m 5 -o /dev/null -w "loopback-bound  -> %{http_code}\n" http://$VM/
+
+# 2. a throwaway container published on ALL interfaces: MUST answer.
+#    Run this ON the VM, and remove it the moment you have your answer.
+#    nginx:1.27-alpine is already on the host -- it is the frontend image's
+#    own runtime base -- and it serves its welcome page with no config of
+#    ours involved, which is the point: this half tests the *network path*.
+docker run -d --name portproof -p 8097:80 nginx:1.27-alpine
+#    then, from the other machine again:
+curl -s -m 5 -o /dev/null -w "all-interfaces  -> %{http_code}\n" http://$VM:8097/
+docker rm -f portproof          # ON the VM. Do not leave this running.
+```
+
+Expect `000` from the first and `200` from the second. If **both** come back
+`000`, your test is broken — wrong address, wrong network, host unreachable —
+and the first result told you nothing. Only once you have seen `200` from the
+second does the `000` from the first mean "bound to loopback".
+
+Do **not** substitute `maec-frontend:latest` for the throwaway container. Run
+on its own, outside the compose network, it exits immediately with `host not
+found in upstream "backend:8000"` — nginx resolves upstream hostnames at
+startup — and you would get `000` from a container that was never listening,
+which looks exactly like the result you are trying to distinguish from.
+
+Nothing legitimate loses access: Caddy terminates TLS on the same host and
+reaches nginx over loopback.
+
+### Trap 2 — a port scan that never reached the host
+
+```bash
+nmap -Pn -p- <vm-ip>          # run from off the box, not on it
+```
+
+Wanted: 22, 80 and 443 answer, and nothing else does. But a scan that reaches
+nothing at all prints a very similar-looking clean result. Give it the same
+positive control: bring `portproof` from Trap 1 back up for a minute, scan
+again, and confirm `8097` now shows as open. Once you have watched the scan
+*find* a port you deliberately opened, remove the container, scan a third
+time, and the quiet result is worth something.
+
+Run the scan from outside the hosting provider's network where you can.
+Some providers filter between their own hosts, which makes a scan from a
+neighbouring VM look cleaner than the internet's view of the same box.
+
+### Trap 3 — the service now refuses to start without a password
+
+`MAEC_PASSWORD` is mandatory and must be at least 8 characters. There is no
+built-in fallback any more, so a missing or short value is not a warning —
+the entrypoint exits and the container does not come up. `MAEC_SECRET_KEY`
+is mandatory for the same reason (see *Why `.env.maec` and not `.env`*).
+
+```bash
+docker compose -f docker-compose.yml logs frontend backend | grep -i fatal
+```
+
+Confirm the positive case too, or you have only proven the container is
+capable of not starting: sign in once over HTTPS and watch the log line.
+
+```
+INFO: sign-in SUCCEEDED at 2026-09-22T07:16:49+00:00: email=... client=...
+```
+
+Failed attempts are logged as `WARNING` with the same shape. The password is
+never logged, in any form.
+
+### Trap 4 — the laptop override following you to the server
+
+Use `-f docker-compose.yml` on the VM, as the deploy commands above do. It
+skips `docker-compose.override.yml`, which publishes 8080 for laptops where
+port 80 is already held. The override is gitignored precisely so a server
+clone cannot inherit one by accident — but `-f` is what makes that certain.
+
+### Two snags that are not security problems, and will still cost you an hour
+
+**`nginx -t` fails on a built image, outside compose.** The config declares
+`upstream maec_backend { server backend:8000; }`, and nginx resolves upstream
+hostnames at startup. Outside the compose network there is no `backend`, so
+the test reports `host not found in upstream` — which reads exactly like a
+broken config and is not one:
+
+```bash
+docker run --rm --add-host backend:127.0.0.1 maec-frontend:latest nginx -t
+```
+
+**Git Bash on Windows rewrites container paths.** `docker run ... grep -n x
+/etc/nginx/conf.d/maec.conf` becomes `C:/Program Files/Git/etc/nginx/...`
+before Docker ever sees it, and the error names a path you never typed:
+
+```bash
+export MSYS_NO_PATHCONV=1      # then the same command works
+```
 
 ---
 
@@ -242,12 +371,38 @@ API and the HTML document will disagree.
    move. After the VM deployment is green, rename it to something honest
    (`MAEC_HTTPS`) and delete the compose line — a future maintainer on a
    Netcup box should not find a variable called `RENDER`.
-2. **Two failing rebadge tests.** Pre-existing, from commit 975f9d4
-   (`sheet_rebadged.pdf` → `sheet.pdf`). Unrelated to Docker; own ticket.
-3. **`httpx` is missing**, so `test_backend_api`, `test_backend_auth` and
-   `test_backend_headers` cannot collect — the API, auth and header tests
-   are not running at all. Add it to a dev/test requirements file, **not**
-   `backend/requirements.txt` (it must not enter the production image).
+2. ~~**Two failing rebadge tests.**~~ *Resolved in b6435c9* — the stale
+   assertions now expect the source file name.
+3. ~~**`httpx` is missing.**~~ *Resolved in 21b38cc* — it lives in
+   `requirements-dev.txt`, outside the production image.
+4. **AirSizer export fails when the schedule carries a large logo.**
+   **Priority: high — a live, user-facing break.** Exporting after loading
+   a HAPExt schedule that embeds the 1.23 MB company logo returns 400,
+   `Field exceeded maximum size of 1024KB`. Starlette caps every
+   *non-file* multipart field at 1 MB, and the browser sends the logo back
+   as a base64 data URL (~1.46 MB) inside the `payload` text field.
+   Pre-existing: `main` fails identically, so it is not a security-merge
+   regression.
+
+   Two ways to fix it, which are not equivalent:
+   - **Send the logo as a file part**, as `/api/hapext/download` already
+     does. File parts spool to disk and are not subject to that cap, so
+     no limit changes. Preferred.
+   - **Raise the field cap** for that route. That changes how requests are
+     parsed and how much is buffered in memory per field, so it needs its
+     own load testing.
+
+   Either way it gets its own testing cycle, not a ride on another change.
+   Verify with the end-to-end harness's `air_export_with_logo` case: 400
+   today (the positive control), 200 with the logo embedded once fixed.
+5. **An interrupted download can leave a scratch folder behind.**
+   **Priority: low.** Downloads stream from a scratch folder (`maec_dl_*`,
+   `maec_air_*`, `maec_rebadge_*`) that a background task deletes once the
+   response finishes. If the browser disconnects first, that task may not
+   run, and the folder stays in the temp directory. Flagged in the Step 2
+   review; not reproduced yet. The main cost is disk, but the folder also
+   keeps a copy of that output on the server until the next restart —
+   worth closing for client drawings, even though nothing serves it.
 
 ---
 

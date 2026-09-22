@@ -28,14 +28,21 @@ FRONTEND_DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Signing in is always required; say which password is in force so a
-    forgotten override cannot pass unnoticed on a public URL."""
-    if auth.using_default_password():
+    """Signing in is always required, so a deployment with no usable password
+    must not come up at all.
+
+    The check lives here rather than at import time on purpose: a failure
+    during startup is reported as what it is — a service that refused to
+    start, with the reason — while the same check at import would surface as
+    an import error from whatever first touched the module, including test
+    collection and tooling that never intended to run the app.
+    """
+    auth.configure_logging()
+    problem = auth.password_problem()
+    if problem:
         where = "on Render" if os.environ.get("RENDER") else "locally"
-        print(f"MAEC: auth ON, using the BUILT-IN password ({where}). "
-              "Set MAEC_PASSWORD to override it.")
-    else:
-        print("MAEC: auth ON (MAEC_PASSWORD configured).")
+        raise RuntimeError(f"MAEC refuses to start ({where}): {problem}")
+    print("MAEC: auth ON (MAEC_PASSWORD configured).")
     if not os.environ.get("MAEC_SECRET_KEY"):
         print("MAEC: MAEC_SECRET_KEY unset — everyone is signed out on restart.")
     yield

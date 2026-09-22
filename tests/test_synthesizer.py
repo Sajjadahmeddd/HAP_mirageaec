@@ -85,7 +85,10 @@ DETAILS = {
     "checked": "FA",
     "revision": "2",
     "date": "20.04.2026",
-    "logo_path": r"C:\brand\mirage.png",
+    # Forward slashes: a separator on Windows AND Linux. A backslash path is
+    # only a path on Windows, so on the Linux CI runner the whole string
+    # became the stem. The engine is right; the fixture was Windows-only.
+    "logo_path": "brand/mirage.png",
 }
 
 

@@ -27,7 +27,7 @@ import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
 
 from .config import Config
-from .xlsx_exporter import SPACE_NAME_INDENT
+from .xlsx_exporter import SPACE_NAME_INDENT, keep_as_text
 
 TITLE_CELL = "A1"
 TITLE_TEXT = "FCU SCHEDULE"
@@ -170,7 +170,7 @@ def append_blocks(
         for values in block:
             is_unit_row = bool(values[_UNIT_COL].strip())
             for col, value in enumerate(values, start=1):
-                cell = sheet.cell(row=row_index, column=col, value=value)
+                cell = keep_as_text(sheet.cell(row=row_index, column=col, value=value))
                 source = sheet.cell(row=template_row, column=col)
                 cell.border = copy(source.border)
                 if col == 1:

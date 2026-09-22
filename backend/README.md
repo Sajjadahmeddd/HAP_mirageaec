@@ -102,14 +102,30 @@ configuration that leaves the app open.
 | Variable | Purpose |
 |---|---|
 | `MAEC_EMAIL` | The sign-in address. Defaults to `mirageaec@mirage.com`. |
-| `MAEC_PASSWORD` | The password. Defaults to the built-in one in `auth.py`. |
+| `MAEC_PASSWORD` | The password. **Mandatory, minimum 8 characters.** No default. |
 | `MAEC_SECRET_KEY` | Signs the session cookie. Changing it signs everyone out. |
 | `MAEC_DISPLAY_NAME` | Who the launcher greets. Defaults to `Mirage AEC`. |
 
-⚠️ Unset does **not** mean open — it means the built-in credentials apply,
-and those are readable by anyone with repository access. Override both before
-sharing a URL. The service prints which password is in force at startup, and
+⚠️ Unset does **not** mean open, and it no longer means a built-in password
+either: **the app refuses to start** if `MAEC_PASSWORD` is missing or shorter
+than 8 characters, and `verify()` refuses every sign-in in that state. There
+is nothing committed in this repository that will let anyone in.
 `/api/health` always reports `"auth": "on"`.
+
+**A wrong password costs a second.** `FAILED_LOGIN_DELAY_SECONDS` is paid on
+failure only, so nobody who types theirs correctly ever waits. There is no
+lockout on purpose: one shared account means a lockout would let any stranger
+shut the team out of their own tool, so guessing is charged in time instead.
+
+**Every sign-in attempt is logged**, success and failure, with a UTC
+timestamp, the address that was tried and where the request came from. The
+password is never logged in any form. Two addresses appear: `claimed-xff` is
+the `X-Forwarded-For` header verbatim — a caller can invent one, so it is
+labelled as claimed — and `client` is the address the server attributes to
+the connection. Note that uvicorn replaces `client` from `X-Forwarded-For`
+when the peer is a trusted proxy (`--forwarded-allow-ips`, default
+`127.0.0.1`), so the two agree for requests from localhost; behind Render's
+proxy or the nginx container they do not.
 
 Everything under `/api/` is guarded except `/api/auth/*` and `/api/health`,
 so a route added for a new module is protected without touching the guard.
@@ -134,11 +150,11 @@ Run it locally — the login screen appears either way:
 .\.venv\Scripts\python -m uvicorn backend.main:app --port 8000
 ```
 
-To use your own credentials instead of the built-in ones:
+`MAEC_PASSWORD` has to be set, or the server will not start:
 
 ```powershell
 $env:MAEC_EMAIL = "you@example.com"
-$env:MAEC_PASSWORD = "something"
+$env:MAEC_PASSWORD = "at-least-8-chars"
 .\.venv\Scripts\python -m uvicorn backend.main:app --port 8000
 ```
 

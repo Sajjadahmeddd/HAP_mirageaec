@@ -1,0 +1,117 @@
+# MAEC continuous integration.
+#
+# Three jobs, so a red tick names the broken thing at a glance.
+#
+# Deliberately NOT here yet:
+#   - container image build + trivy scan. Render does not run these images and
+#     no VM exists, so scanning an artefact nothing executes is maintenance for
+#     no benefit. Add it the week the VM is purchased.
+#   - SARIF upload to the Security tab. Needs GitHub Advanced Security on a
+#     private repository, and would fail the job for a reason unrelated to
+#     security.
+#   - a deploy job. See the commented sketch at the bottom.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+  # Weekly, because new CVEs are published whether or not anyone pushes. An
+  # audit that only runs on push goes blind in a quiet week -- which is
+  # exactly when a PyMuPDF advisory would land unnoticed.
+  schedule:
+    - cron: "0 3 * * 1"          # Mondays 03:00 UTC
+
+# A newer push to the same ref makes the older run pointless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# The default token can write to the repository. Nothing here needs to.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      # The app requires MAEC_PASSWORD and refuses to start without one, so
+      # the test job supplies it. This is a test fixture, not a credential --
+      # it protects nothing, and it is safe in a public file.
+      MAEC_PASSWORD: ci-test-fixture-not-a-secret
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"      # matches render.yaml and the container
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            requirements-dev.txt
+      # requirements-dev.txt begins with -r backend/requirements.txt, so this
+      # installs exactly the pinned production set plus pytest and httpx.
+      - run: pip install -r requirements-dev.txt
+      # main.py registers the SPA route only if frontend/dist exists. It is
+      # gitignored and built by render.yaml in production, and the frontend
+      # job below proves the real bundle builds. The auth and header tests
+      # only need the backend to serve *a* shell, so a stub is enough.
+      # Done here rather than in conftest.py, which would leave a blank stub
+      # in the working tree for the next local `python -m backend.main`.
+      - run: mkdir -p frontend/dist/assets && echo '<!doctype html><title>MAEC</title>' > frontend/dist/index.html
+      # -rs prints the REASON for every skip in the summary. Without it CI
+      # reports a bare "1 skipped" for a module holding 23 desktop tests, and
+      # a reader cannot tell what is missing -- silent non-collection is how
+      # three whole modules once went unrun unnoticed.
+      - run: python -m pytest -q -rs
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"      # Node 20 reached end of life in April 2026
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      # --omit=dev audits only what reaches the browser: react and react-dom.
+      # Vite and esbuild are build tools that never ship, and they are where
+      # advisories cluster -- auditing them would turn this red for code no
+      # user ever executes.
+      - run: npm audit --omit=dev --audit-level=high
+
+  deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install pip-audit
+      # Accepted findings go here as `--ignore-vuln <ID>`, each with a comment
+      # giving the reason and the date. Never lower the threshold instead.
+      - run: pip-audit -r backend/requirements.txt
+
+# ---------------------------------------------------------------------------
+# Deploy -- intentionally not implemented. No server exists, and adding SSH
+# secrets for a host that doesn't exist is how secrets end up committed.
+# The intended shape, for whoever writes it on VM day:
+#
+#   deploy:
+#     needs: [test, frontend, deps]
+#     if: github.ref == 'refs/heads/main'
+#     runs-on: ubuntu-latest
+#     permissions:
+#       contents: read
+#       packages: write
+#     steps:
+#       - build both images, push to ghcr.io
+#       - ssh to the VM (key from secrets, host key pinned)
+#       - docker compose pull && docker compose up -d
+#       - curl the health endpoint; fail the job if it is not healthy
+# ---------------------------------------------------------------------------

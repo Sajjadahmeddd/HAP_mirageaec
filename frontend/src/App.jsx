@@ -10,11 +10,11 @@
 // server-side: a sizing run happens in one sitting and the exported workbook
 // is the artifact. That part is untouched.
 //
-// Who the user is comes from MAEC One Core. On load this asks the backend
-// (/api/auth/me); a 401 means no session here, and the browser is sent to
-// /auth/login, which bounces through Core and returns with a token. Core's
-// own session usually outlives this product's, so that round trip normally
-// shows no sign-in screen at all.
+// Who the user is comes from MAEC One Core. The server asks Core about the
+// browser's MAEC One cookie on every request, and sends a signed-out browser
+// to Core's sign-in before this bundle even loads. On load this asks
+// /api/auth/me for the name and the tabs; a 401 there means the person signed
+// out at MAEC One meanwhile, and the window goes to the login_url it carries.
 
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
@@ -68,7 +68,7 @@ const PAGES = {
 }
 
 // ------------------------------------------------------- Engineering Tools
-function EngineeringTools({ ctx, airConfig, airError, modules }) {
+function EngineeringTools({ ctx, airConfig, airError, modules, coreUrl }) {
   const location = useLocation()
   const navigate = useNavigate()
   const page = pageOf(location.pathname)
@@ -91,23 +91,21 @@ function EngineeringTools({ ctx, airConfig, airError, modules }) {
   return (
     <div className="shell">
       <div className="titlebar">
-        {/* Three controls stood here and all three acted on a session: the
-            logo returned to the MAEC One launcher, "Global Admin" opened the
-            admin shell, and "Sign out" ended the session. All three are
-            Core's now, and a button that cannot do what it says is worse
-            than no button — so the logo is a plain mark until the OIDC
-            client gives it somewhere real to go. */}
         <img className="titlebar-logo" src="/maec-logo.png" alt="MAEC" />
         <span className="version">v{VERSION}</span>
         <span className="grow" />
+        {/* Signing out happens at MAEC One, and signs the person out of every
+            app at once — this product holds no session of its own to end. */}
+        {coreUrl && (
+          <a className="btn-ghost" href={coreUrl} title="Sign out at MAEC One">Sign out</a>
+        )}
       </div>
 
       <div className="tabbar">
-        {/* A module whose winning tool rule is `hidden` or `no_access` is not
-            offered. That is decluttering, not the boundary: the guard refuses
-            `no_access` at the API whatever is rendered, and still answers
-            `hidden`. The two are kept apart on purpose — see maec_auth/guard.py
-            and Core's OPEN-DECISIONS #3. */}
+        {/* A module Core lists in nav_hidden, or one the person may not view,
+            is not offered. That is decluttering, not the boundary: the server
+            refuses a route whose permission the person lacks whatever is
+            rendered here. See maec_auth/guard.py. */}
         {TABS.filter((name) => modules?.[MODULE_OF[name]] !== false).map((name) => {
           const disabled = name === 'HAPAudit' || (name === 'AirSizer Pro' && !airConfig)
           return (
@@ -182,21 +180,19 @@ export default function App() {
   useEffect(() => {
     auth.me()
       .then((who) => {
-        if (who) { setSession(who); return }
-        // No session here. Core probably still knows this browser, so one
-        // trip through /auth/login usually returns signed in. If we have
-        // already been sent once this visit, stop and say so rather than
-        // bouncing between two services.
-        if (!reauthorize()) {
+        if (who.authenticated) { setSession(who); return }
+        // MAEC One no longer knows this browser. One trip to its sign-in, and
+        // back. If we have already been sent once this visit, stop and say so
+        // rather than bouncing between two services.
+        if (!reauthorize(who.login_url)) {
           setSession({ authenticated: false, refused: true })
         }
       })
       .catch((err) => setSession({ authenticated: false, refused: true, error: err.message }))
   }, [])
 
-  // Asked once there is a session: before that every call is a guaranteed
-  // 401, and a 401 now triggers a re-authorization — so asking early would
-  // send the browser to Core for a token it is already about to get.
+  // Asked once there is a session: a 401 sends the window to sign-in, so
+  // asking before /api/auth/me has answered could leave the page for nothing.
   useEffect(() => {
     if (!session?.authenticated) return
     airApi.config()
@@ -294,14 +290,10 @@ export default function App() {
     bumpRecents: () => setRecentsKey((n) => n + 1),
   }
 
-  // Three gates stood here — a loading state while GET /api/auth/me
-  // answered, the forced password change, and the sign-in screen — followed
-  // by routes for the launcher and Global Admin. All of it was Core's.
-  //
-  // Engineering Tools is now mounted at the root with nothing in front of
-  // it. The route table is a single entry on purpose: adding a redirect to
-  // Core here would look like authentication without being any, and this
-  // branch is clearer being visibly open than subtly so.
+  // The sign-in screen, the launcher and Global Admin are MAEC One's. The
+  // server's gate stands in front of this bundle, so by the time it runs the
+  // person is signed in; these two states cover asking, and a sign-out that
+  // happened since.
   if (session === null) {
     return (
       <div className="shell" style={{ alignItems: 'center', justifyContent: 'center' }}>
@@ -311,20 +303,19 @@ export default function App() {
   }
 
   if (!session.authenticated) {
-    // Reached only when a fresh token did not help: the seat was revoked, the
-    // organisation was suspended, or Core refused for its own reasons. The
-    // way back is a click, never an automatic redirect — that is what keeps
-    // a refusal from becoming a loop.
+    // Reached only when one trip to MAEC One's sign-in did not bring the
+    // browser back signed in. The way back is a click, never an automatic
+    // redirect — that is what keeps a refusal from becoming a loop.
     return (
       <div className="shell" style={{ alignItems: 'center', justifyContent: 'center' }}>
         <div className="card col" style={{ padding: '28px 32px', maxWidth: 460 }}>
           <h2 className="h2">You are not signed in to Engineering Tools</h2>
           <div className="small">
             {session.error
-              || 'MAEC One Core did not grant this browser access. Your account may '
-                 + 'not hold a seat for this product.'}
+              || 'MAEC One did not sign this browser in. Open MAEC One, sign in '
+                 + 'there, then come back.'}
           </div>
-          <a className="btn btn-primary" href="/auth/login">Sign in again</a>
+          <a className="btn btn-primary" href="/">Try again</a>
         </div>
       </div>
     )
@@ -334,7 +325,7 @@ export default function App() {
     <Routes>
       <Route path="*" element={
         <EngineeringTools ctx={ctx} airConfig={airConfig} airError={airError}
-                          modules={session.modules} />
+                          modules={session.modules} coreUrl={session.core_url} />
       } />
     </Routes>
   )

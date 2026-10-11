@@ -1,62 +1,71 @@
 // Engineering Tools' client. Thin fetch wrappers: every call maps to one
 // endpoint that wraps one engine function — no logic lives here.
 //
-// Sign-in and the admin API are NOT here and never were: they belong to
-// MAEC One Core, which is now a separate service. This name used to be
-// imported from Core's client — the one thing the product borrowed from it.
-// That client left with Core, so the name is defined here.
-//
-// A 401 now means the token behind this browser's session has expired —
-// Core mints them for fifteen minutes. Because Core's own session cookie
-// usually outlives that, sending the browser to /auth/login gets a fresh
-// token and comes straight back with no sign-in screen shown.
+// Signing in and out are NOT here: they happen at MAEC One Core. On every
+// request the server asks Core about the browser's MAEC One cookie. An API
+// 401 means Core no longer knows this browser (signed out, or the session
+// ended), and its body carries `login_url`: Core's sign-in, coming back here.
 
 export const SESSION_EXPIRED = 'maec:session-expired'
 
-// One re-authorization per visit. The redirect reloads the page, so a plain
-// variable would forget it had happened and the next 401 would redirect
-// again — and if the fresh token is refused too (a revoked seat, a suspended
-// organisation), that is a loop between two services with the user watching
-// it flicker. sessionStorage survives the redirect; a successful call clears
-// it, so a later expiry is free to re-authorize once more.
+// One trip to sign-in per visit. The trip reloads the page, so a plain
+// variable would forget it had happened, and if the next answer is a 401 too
+// that is a loop between two services with the user watching it flicker.
+// sessionStorage survives the trip; a successful /api/auth/me clears it, so a
+// later sign-out is free to send the window to sign-in once more.
 const REAUTH_MARK = 'maec:reauthorizing'
 
-/** Send the browser to Core for a fresh token. False if we already tried. */
-export function reauthorize() {
+/** Send the window to MAEC One's sign-in. False if we already tried. */
+export function reauthorize(loginUrl) {
   try {
     if (sessionStorage.getItem(REAUTH_MARK)) return false
     sessionStorage.setItem(REAUTH_MARK, String(Date.now()))
-  } catch { /* private mode: fall through and redirect once */ }
-  window.location.assign('/auth/login')
+  } catch { /* private mode: fall through and go once */ }
+  // Without a login_url, reloading the page lets the server's gate send the
+  // browser to sign-in itself.
+  window.location.assign(loginUrl || window.location.href)
   return true
 }
 
-/** Called when a request succeeds: the round trip worked, so allow another
- *  re-authorization the next time one is needed. */
+/** Called when /api/auth/me succeeds: the trip worked, so allow another. */
 export function reauthorizationWorked() {
   try { sessionStorage.removeItem(REAUTH_MARK) } catch { /* nothing to clear */ }
 }
 
-function checkAuth(response) {
-  if (response.status === 401) {
-    window.dispatchEvent(new CustomEvent(SESSION_EXPIRED))
-    if (reauthorize()) {
-      throw new Error('Your session expired — signing you in again…')
-    }
-    throw new Error(
-      'Your session expired and signing in again did not work. '
-      + 'You may no longer have access to Engineering Tools.')
+async function readJson(response) {
+  try { return await response.clone().json() } catch { return {} }
+}
+
+// What a refusal says to a person, from Core's `reason` or the API's `detail`.
+const REASONS = {
+  no_access: 'Your account does not have access to Engineering Tools.',
+  org_suspended: "Your organisation's access to MAEC One is suspended.",
+  bad_origin: 'This request did not come from Engineering Tools itself.',
+  bad_app: 'Engineering Tools is not set up correctly with MAEC One.',
+}
+
+function reasonText(body) {
+  return body.detail || REASONS[body.reason]
+    || (body.reason ? `MAEC One refused access (${body.reason}).` : '')
+}
+
+async function checkAuth(response) {
+  if (response.status !== 401) return
+  const body = await readJson(response)
+  window.dispatchEvent(new CustomEvent(SESSION_EXPIRED))
+  if (reauthorize(body.login_url)) {
+    throw new Error('You are signed out — taking you to MAEC One to sign in…')
   }
+  throw new Error(
+    'You are signed out, and signing in again did not bring you back. '
+    + 'Open MAEC One and sign in there.')
 }
 
 async function asJson(response) {
-  checkAuth(response)
+  await checkAuth(response)
   if (!response.ok) {
     let detail = `Request failed (${response.status})`
-    try {
-      const body = await response.json()
-      detail = body.detail || detail
-    } catch { /* non-JSON error body */ }
+    detail = reasonText(await readJson(response)) || detail
     throw new Error(detail)
   }
   return response.json()
@@ -65,13 +74,10 @@ async function asJson(response) {
 // A file download: the server streams the built file back, and the browser
 // saves it under the filename in Content-Disposition.
 async function download(response, fallbackName) {
-  checkAuth(response)
+  await checkAuth(response)
   if (!response.ok) {
     let detail = `Download failed (${response.status})`
-    try {
-      const body = await response.json()
-      detail = body.detail || detail
-    } catch { /* non-JSON error body */ }
+    detail = reasonText(await readJson(response)) || detail
     throw new Error(detail)
   }
   const disposition = response.headers.get('content-disposition') || ''
@@ -102,21 +108,25 @@ export function base64ToBlob(b64, type) {
 
 // -------------------------------------------------------------------- auth
 export const auth = {
-  /** Who this browser is, or null when it is nobody.
+  /** Who this browser is, or {authenticated: false, login_url} when MAEC One
+   *  does not know it.
    *
    *  Deliberately not routed through checkAuth: this is the question "am I
    *  signed in?", and a 401 is one of its two valid answers, not a failure
-   *  that should redirect on its own. The caller decides what to do about it.
+   *  that should leave the page on its own. The caller decides.
    */
   async me() {
     const response = await fetch('/api/auth/me')
-    if (response.status === 401) return null
-    if (!response.ok) throw new Error(`Could not read the session (${response.status})`)
+    if (response.status === 401) {
+      const body = await readJson(response)
+      return { authenticated: false, login_url: body.login_url }
+    }
+    if (!response.ok) {
+      const body = await readJson(response)
+      throw new Error(reasonText(body) || `Could not read the session (${response.status})`)
+    }
     reauthorizationWorked()
     return response.json()
-  },
-  logout() {
-    return fetch('/api/auth/logout', { method: 'POST' }).then(asJson)
   },
 }
 
@@ -189,13 +199,10 @@ export const airsizer = {
 // A response that is both a file and a report: the batch summary rides in a
 // header so the Export screen can show per-sheet notes without a second call.
 async function downloadWithSummary(response, fallbackName, header) {
-  checkAuth(response)
+  await checkAuth(response)
   if (!response.ok) {
     let detail = `Rebadging failed (${response.status})`
-    try {
-      const body = await response.json()
-      detail = body.detail || detail
-    } catch { /* the body was the file, not an error */ }
+    detail = reasonText(await readJson(response)) || detail
     throw new Error(detail)
   }
   const disposition = response.headers.get('content-disposition') || ''
@@ -221,10 +228,10 @@ export const rebadge = {
     form.append('file', file)
     form.append('payload', JSON.stringify(inputs))
     const response = await fetch('/api/rebadge/preview', { method: 'POST', body: form })
-    checkAuth(response)
+    await checkAuth(response)
     if (!response.ok) {
       let detail = `Preview failed (${response.status})`
-      try { detail = (await response.json()).detail || detail } catch { /* not JSON */ }
+      detail = reasonText(await readJson(response)) || detail
       throw new Error(detail)
     }
     let warnings = []

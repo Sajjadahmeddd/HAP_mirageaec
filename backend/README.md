@@ -21,6 +21,12 @@ What the port replaces is only the UI layer:
 
 ## Run it locally
 
+Every request is checked with MAEC One Core, so Core has to be running and the
+three gate settings set — see `backend/maec_auth/README.md` for both, and open
+the app at `http://et.maec.local:8080`. The Vite dev server below serves the
+UI but cannot sign anyone in: the browser holds Core's cookie only for
+`.maec.local` hosts, never for `localhost:5173`.
+
 Two terminals, from the repo root:
 
 ```powershell
@@ -89,74 +95,34 @@ MuPDF's rewriter shifts a single annotation by 4.8 pt; that sheet is emitted
 with a named warning rather than silently. See the module summary for the
 open question about whether that should fail the sheet instead.
 
-## Sign-in — there is none, and that is temporary
+## Sign-in — at MAEC One, checked here on every request
 
-⚠️ **This service currently has no authentication of any kind.** Every route
-under `/api/` answers anybody who can reach the address, and so do `/docs`,
-`/redoc` and `/openapi.json`, which map every endpoint and its request shape.
-Do not deploy this branch.
+Engineering Tools signs nobody in. A person signs in once at MAEC One Core,
+whose session cookie is set for the parent domain (`.mirageaec.com`; locally
+`.maec.local`) and so reaches this service too. On every request the gate
+(`backend/maec_auth/gate.py`) forwards that cookie to Core's
+`/api/gate/check` with this app's key and secret, and Core answers: who the
+person is and what they may do, or not signed in, or no access. Core
+unreachable is a 503 — never a pass. Details: `backend/maec_auth/README.md`.
 
-It used to say the opposite, and the opposite used to be true:
-`backend/identity/` held per-person accounts in PostgreSQL with argon2id
-hashes, a guard on every request, per-IP login rate limiting, escalating
-lockout and an append-only audit log. All of it now lives in **MAEC One
-Core**, in the `maec-one-core` repository and, once deployed, at
-`auth.mirageaec.com`. None of it was lost; it stopped being in *this*
-process.
+Each `/api/` route then needs its own permission from the map in
+`backend/maec_auth/guard.py`, looked up in the list Core returned. A route with
+no entry is refused, and `test_every_product_route_names_a_permission` fails
+first.
 
-Removing it was the point rather than a casualty. Two copies of one
-permission engine in two repositories drift from the day they exist, so the
-copy had to go before the handoff could be built against one source of truth.
+Nothing is cached, so a revoked seat or a sign-out at MAEC One bites on the
+very next request. "Sign out" in the title bar goes to MAEC One: signing out
+there signs the person out everywhere.
 
-### What replaces it
-
-A person signs in once at Core, opens the Engineering Tools tile, and arrives
-here already identified — no second login. Three pieces make that work and
-none of them exist yet:
-
-1. **`/auth/callback`** — receives a one-time code from Core and exchanges it
-   server-to-server for a short-lived JWT scoped to this application.
-2. **Local verification** against Core's published JWKS — signature, `iss`,
-   `exp`, and `aud` naming *this* client, so a token minted for one of the
-   other seven applications does not open this one.
-3. **Enforcement from the token's claims** rather than from a database read.
-   Core stays the only service that touches the identity store; Engineering
-   Tools never holds credentials to it.
-
-`tests/test_backend_auth.py` carries all three as skipped tests, alongside
-the list of product routes that must refuse a stranger — kept verbatim from
-when the guard enforced it, because that list is the specification the new
-guard inherits.
-
-### The one property that does not survive unchanged
-
-The old guard re-read the user row on **every** request, so a suspension or a
-revoked seat took effect on the very next call. A token cannot do that: it is
-believed until it expires. The honest replacement is "within the token's
-lifetime", which makes **how long that lifetime is** a security decision
-rather than a tuning parameter.
-
-It is deliberately not decided here — see `OPEN-DECISIONS.md` #11, which also
-weighs the alternative of shipping a copy of the identity package and
-connecting to Core's database. That alternative works on day one and is
-rejected for a reason worth reading before anyone reaches for it again.
-
-## The launcher
-
-Gone with Core. Signing in used to land on the MAEC One launcher — eight
-tiles, one per product — and `Launcher.jsx` went to `maec-one-core` with the
-rest of the sign-in surface. Engineering Tools is mounted at the root here
-and the title-bar wordmark is a plain mark: it pointed back at the launcher,
-and a control that cannot do what it says is worse than no control. It
-becomes a link to Core when the handoff lands.
+Not checked with Core: `/assets/*`, `/favicon.png`, and `/api/health`, which
+Render probes and which must answer while Core is down.
 
 ## Response headers
 
 `SECURITY_HEADERS` in `main.py` bounds what a browser will do with a page we
 served. It gates nobody, and is registered **last** so that it wraps every
-response. That mattered most when it wrapped the guard's 401, which returned
-without calling through; with the guard gone these headers are the only
-protection on this branch that still works exactly as it always did.
+response — including the gate's refusals, which return without calling
+through.
 
 The policy is tight because everything is same-origin. Two concessions are
 real needs, not guesses:
@@ -176,16 +142,10 @@ driving in a real browser, not just the test client.
 
 ## Adding the other MAEC One modules
 
-Core's business now, and documented there. The tile list is computed from the
+Core's business, and documented there. The launcher's tiles come from Core's
 `applications` table, the organisation's subscriptions and the person's
-licences — none of which this service can see any more, which is the whole
-point of the split.
-
-⚠️ **Sessions do not cross origins.** A cookie is host-only, so single
-sign-on across the eight applications cannot be a shared cookie — that would
-scope our session to `.mirageaec.com`, within reach of the marketing site on
-the same registrable domain. It is a redirect-based token exchange
-(OIDC/JWT) issued by Core, which is the work described under "Sign-in" above.
+licences. An app joins by being under the cookie's domain, having a
+`GATE_SECRETS` entry in Core, and running a gate like this one.
 
 ## Statelessness
 

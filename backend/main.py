@@ -21,7 +21,7 @@ from hap_converter import __version__
 
 from .deps import airsizer_config, hapext_config
 from .maec_auth import config as auth_config
-from .maec_auth import guard
+from .maec_auth import gate as auth_gate
 from .maec_auth import routes as auth_routes
 from .routers import airsizer, hapext, rebadge
 
@@ -29,26 +29,16 @@ FRONTEND_DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Say what this process is, and refuse to be a deployment that cannot.
+    """Refuse to start without the three gate settings, and say what this is.
 
-    For one branch this printed "NO AUTHENTICATION" on every boot, because
-    that was true. It is not any more: every route below needs a token MAEC
-    One Core signed. What is still worth saying out loud is the configuration,
-    because a service missing its client secret can serve a sign-in button
-    that only ever fails — on Render `require_all` refuses the boot outright,
-    and locally it prints what is absent rather than dying at import.
+    A service that cannot ask MAEC One who anybody is can only refuse every
+    request, so it does not boot at all: `require_all` raises and uvicorn
+    exits with the names of what is missing.
     """
     where = "on Render" if os.environ.get("RENDER") else "locally"
     auth_config.require_all()
-    absent = auth_config.missing()
     print(f"Engineering Tools starting {where}.")
-    if absent:
-        print("  !! " + ", ".join(absent) + " not set — nobody can sign in.")
-        print("  !! The API refuses every request until they are. This is the")
-        print("  !! closed direction, not an open one.")
-    else:
-        print(f"  auth: OIDC client of {auth_config.issuer()} "
-              f"(aud {auth_config.APP_KEY})")
+    print(f"  auth: gate of {auth_config.core_url()} (app {auth_config.app_key()})")
     yield
 
 
@@ -93,50 +83,36 @@ SECURITY_HEADERS = {
 
 
 # ==========================================================================
-# THE GATE. Engineering Tools as a client of MAEC One Core.
+# THE GATE. Engineering Tools signs nobody in; MAEC One Core does.
 # ==========================================================================
 #
-# All three pieces the previous comment specified are here, in maec_auth/:
+# Core's session cookie is shared across the parent domain, so it arrives on
+# every request here. maec_auth/gate.py forwards it to Core's /api/gate/check
+# with this app's key and secret, and acts on the answer: 200 lets the request
+# through with Core's answer on request.state.maec, 401 sends the person to
+# sign in, 403 says no, and no answer is a 503 — never a pass. Then
+# maec_auth/guard.py checks the route's own permission against Core's list.
 #
-#   1. /auth/callback takes Core's one-time code and exchanges it
-#      server-to-server for a short-lived JWT scoped to this client
-#      (maec_auth/routes.py). /auth/login is the only place that redirects
-#      to Core, so there is one origin for a sign-in and no way to loop.
-#   2. maec_auth/verify.py checks that token against Core's published JWKS:
-#      RS256 and the header's kid, iss, exp, and aud naming *this*
-#      application, so a token minted for one of the other seven does not
-#      open this one.
-#   3. maec_auth/guard.py enforces from the claims, through the engine
-#      vendored from Core — from_claims, then resolve. This service never
-#      touches the identity database; Core remains the only one that does.
-#
-# The property that was lost is still lost, on purpose and not by accident:
-# nothing here re-reads a user row, so a suspension or a revoked seat bites
-# within the token's fifteen minutes rather than on the next call. That is
-# Core #16's number and #11's trade.
+# Nothing is cached, so a revoked seat or a sign-out at Core bites on the
+# very next request.
 #
 # Registered below `security_headers` so that one stays outermost and wraps
-# the guard's 401 — a refusal carries the same CSP as a page.
+# the gate's refusals — a refusal carries the same CSP as a page.
 # ==========================================================================
 
 
 @app.middleware("http")
 async def gate(request: Request, call_next):
-    """Refuse anything from a browser Core has not vouched for.
-
-    Synchronous inside: it reads an in-process dict and runs the engine over
-    claims already in memory. There is no database call left to keep off the
-    event loop, which is the whole shape of the change.
-    """
-    refusal = guard.inspect(request)
+    """Refuse anything from a browser MAEC One has not vouched for."""
+    refusal = await auth_gate.inspect(request)
     if refusal is not None:
         return refusal
     return await call_next(request)
 
 
 # Registered last, so it is the outermost layer and sees every response —
-# including the guard's 401, which returns without calling through and so
-# never reaches anything registered beneath it.
+# including the gate's refusals, which return without calling through and so
+# never reach anything registered beneath them.
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
@@ -176,11 +152,9 @@ async def health():
         "version": __version__,
         "modules": ["HAPExt", "AirSizer Pro"],
         "diffusers": len(air.diffusers),
-        # "none" while this branch had no gate at all, and that was the
-        # honest word then. It is an OIDC client of Core now — named rather
-        # than a bare "on", because which mechanism is guarding a service is
-        # the useful thing to read on a health check.
-        "auth": "oidc",
+        # Which mechanism guards this service: the useful thing to read on a
+        # health check. "gate" — every request is checked with MAEC One.
+        "auth": "gate",
     }
 
 

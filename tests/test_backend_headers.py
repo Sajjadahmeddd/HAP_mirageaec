@@ -19,7 +19,8 @@ def client():
 @pytest.mark.parametrize("header", list(SECURITY_HEADERS))
 def test_every_response_carries_the_headers(client, header):
     """Including the ones a stranger gets, which is when they matter most."""
-    assert header in client.get("/").headers
+    # A stranger's page is a 302 to MAEC One's sign-in; the headers ride on it.
+    assert header in client.get("/", follow_redirects=False).headers
     assert header in client.get("/api/health").headers
     # A 401 — the gate refuses a stranger, and the headers ride along on the
     # refusal, which is exactly when they matter most.
@@ -53,18 +54,18 @@ def test_our_own_platform_may_still_frame_us():
 def test_hsts_only_once_deployed(monkeypatch, client):
     """Asserting it locally would pin a developer's browser to https://."""
     monkeypatch.delenv("RENDER", raising=False)
-    assert "Strict-Transport-Security" not in TestClient(app).get("/").headers
+    assert "Strict-Transport-Security" not in TestClient(app).get("/api/health").headers
     monkeypatch.setenv("RENDER", "true")
-    assert "Strict-Transport-Security" in TestClient(app).get("/").headers
+    assert "Strict-Transport-Security" in TestClient(app).get("/api/health").headers
 
 
 def test_headers_do_not_gate_anything(client, engineer_client):
     """The point of the whole file: nothing here changes who gets in.
 
-    The last call is made as a signed-in engineer, because a stranger is
-    refused by the gate rather than by anything in this file. The assertion
-    means what it always meant: these headers let the request through.
+    The page and API calls are made as a signed-in engineer, because a
+    stranger is refused by the gate rather than by anything in this file. The
+    assertion means what it always meant: these headers let the request through.
     """
     assert client.get("/api/health").status_code == 200
-    assert client.get("/").status_code == 200
+    assert engineer_client.get("/").status_code == 200
     assert engineer_client.get("/api/airsizer/config").status_code == 200

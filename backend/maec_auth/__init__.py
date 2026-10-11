@@ -1,6 +1,6 @@
-"""What Engineering Tools needs to be a client of MAEC One Core.
+"""What Engineering Tools needs to let MAEC One Core's signed-in people in.
 
-Today: the vendored copy of Core's permission engine (resolution.py) and the
-hash that proves it has not drifted. The OIDC client — the callback, the token
-exchange, JWKS verification and this product's own session — lands here next.
+The gate (gate.py) asks Core about the browser's cookie on every request; the
+guard (guard.py) maps each route to the permission it needs; routes.py tells
+the frontend who it is talking to. Signing in and out happen at Core.
 """

@@ -4,8 +4,8 @@ These cover the layer the desktop tests cannot reach: the routers, their
 error paths, and — the point of the whole port — that a request through HTTP
 produces the same bytes the desktop app produces from the same input.
 
-Signing in is mandatory, so the client fixture signs in once; the gate
-itself is covered in test_backend_auth.py.
+Signing in is mandatory, so the client fixture carries a MAEC One session
+the fake Core recognises; the gate itself is covered in test_backend_auth.py.
 """
 
 import csv
@@ -47,10 +47,10 @@ SCHEDULE_ROWS = [
 def client(engineer_client):
     """These tests exercise the routers, not the gate.
 
-    Signed in as an ordinary engineer, through the real OIDC flow against the
-    miniature Core in conftest.py, so the requests reach the routers at all —
-    and, in doing so, prove that a normal seat is enough. The gate itself is
-    tested in test_backend_auth.py.
+    Signed in as an ordinary engineer, through the real gate against the fake
+    Core in conftest.py, so the requests reach the routers at all — and, in
+    doing so, prove that a normal seat is enough. The gate itself is tested in
+    test_backend_auth.py.
     """
     return engineer_client
 
@@ -83,11 +83,10 @@ def test_health_reports_both_modules_and_the_catalogs(client):
     assert body["status"] == "ok"
     assert body["modules"] == ["HAPExt", "AirSizer Pro"]
     assert body["diffusers"] == 5
-    # "none" for the one branch that had no gate, as this comment promised
-    # until the OIDC client landed. Asserted rather than dropped, because a
-    # health check quietly losing a field is how a service ends up claiming a
+    # Which mechanism guards the service. Asserted rather than dropped, because
+    # a health check quietly losing a field is how a service ends up claiming a
     # protection it lost.
-    assert body["auth"] == "oidc"
+    assert body["auth"] == "gate"
 
 
 # ------------------------------------------------------------------- HAPExt

@@ -85,9 +85,29 @@ needs — `CORE_URL` (Core inside Docker, `http://maec-core:8000`),
 `MAEC_GATE_SECRET` — and the container refuses to start without them. With
 no session held here, any number of workers is fine.
 
-Core's compose project joins this stack's network, `maec_maec_net`, under
-the alias `maec-core`, so **bring this stack up first**: Core's expects the
-network to exist.
+This stack joins **Core's** network, `maec_core_net` (external — Core's
+compose project creates it), where Core answers as `maec-core`. So **bring
+Core's stack up first.** Engineering Tools still starts while Core is stopped
+and shows "MAEC One is unavailable"; it cannot start if the network does not
+exist at all.
+
+## Running next to the old stack
+
+The gated stack is built to run beside the old Engineering Tools on the same
+VPS and collide with none of it. Everything that could clash is set
+explicitly in `docker-compose.yml`, with defaults you can override in a `.env`
+beside it (documented in `.env.example`):
+
+| | old stack | this stack |
+|---|---|---|
+| compose project | `maec` | `maec-et` |
+| published port | `127.0.0.1:80` | `127.0.0.1:${ET_PORT:-8081}` |
+| internal network | `maec_maec_net`, `172.30.57.0/24` | `maec_et_net`, `${ET_NET_SUBNET:-172.30.81.0/24}` |
+| MAEC One Core | — | joins `maec_core_net` (external) |
+
+**Going live is a Caddy switch:** change `et.mirageaec.com`'s block from
+`reverse_proxy localhost:80` to `reverse_proxy localhost:8081` and reload
+Caddy. **Rolling back is changing it back.** Neither touches a container.
 
 ---
 
@@ -102,11 +122,9 @@ docker compose ps          # both services should reach "healthy"
 ```
 
 The worker count is derived at startup, so there is nothing to tune for a
-laptop. The only local difference is the port: copy
-`docker-compose.override.yml.example` to `docker-compose.override.yml` to
-serve on **<http://localhost:8080>** instead of 80, which matters when IIS,
-http.sys or a system nginx already holds 80. Confirm the worker count from
-the startup log:
+laptop. It publishes on **<http://localhost:8081>** (`ET_PORT`), so a port 80
+already held by IIS, http.sys or another stack is no obstacle. Confirm the
+worker count from the startup log:
 
 ```bash
 docker compose logs backend | head -1
@@ -170,22 +188,22 @@ Rollback is `git checkout <previous-commit>` and the same two commands.
 
 ## HTTPS — required before sharing the URL
 
-The stack publishes plain HTTP on :80, **bound to 127.0.0.1** — so it is
+The stack publishes plain HTTP on :8081, **bound to 127.0.0.1** — so it is
 reachable from the host itself and from nothing else. These are client
 drawings; do not expose that directly. Caddy on the host handles
-certificates automatically:
+certificates automatically; once this stack is live its block reads:
 
 ```
 # /etc/caddy/Caddyfile
-engineeringtools.mirageaec.com {
-    reverse_proxy localhost:80
+et.mirageaec.com {
+    reverse_proxy localhost:8081    # localhost:80 = the old stack (rollback)
 }
 ```
 
 Caddy then owns :443. The loopback bind in `docker-compose.yml` is what
-keeps :80 private, and it matters more than a firewall rule here: Docker
+keeps :8081 private, and it matters more than a firewall rule here: Docker
 publishes ports through DNAT rules that are evaluated *before* ufw's, so a
-port published as `80:80` stays reachable from the internet while `ufw
+port published as `8081:80` stays reachable from the internet while `ufw
 status` still reads "deny". Keep the `127.0.0.1:` prefix on that line.
 
 **One ordering trap:** sign-in needs the real address. MAEC One's cookie is
@@ -195,11 +213,13 @@ signed in. Bring Caddy up before testing sign-in.
 
 **The scheme reaches the app through two proxies.** Caddy terminates TLS
 and sets `X-Forwarded-Proto: https` and `X-Forwarded-Host`; the nginx
-container passes both through unchanged (`frontend/nginx.conf`); uvicorn
-believes them only from `FORWARDED_ALLOW_IPS`, which compose sets to
-`maec_net`'s fixed subnet. Without all three links the app thinks it is on
-`http://`, and Core refuses the return-after-sign-in address, so people
-land on the MAEC One launcher instead of back in Engineering Tools.
+container passes both through unchanged (`frontend/nginx.conf`); the app
+believes them only when the request's socket peer is in `TRUSTED_PROXIES`,
+which compose sets to `maec_et_net`'s fixed range (`backend/maec_auth/proxy.py`;
+uvicorn runs with `--no-proxy-headers` so that is the only list). Without all
+three links the app thinks it is on `http://`, and Core refuses the
+return-after-sign-in address, so people land on the MAEC One launcher instead
+of back in Engineering Tools.
 
 ---
 
@@ -224,7 +244,7 @@ What closes it is the bind address in `docker-compose.yml`:
 
 ```yaml
 ports:
-  - "127.0.0.1:80:80"     # not "80:80"
+  - "127.0.0.1:${ET_PORT:-8081}:80"     # not "8081:80"
 ```
 
 **Prove it, both ways.** From another machine on the network (or any host
@@ -289,7 +309,7 @@ docker compose -f docker-compose.yml logs frontend backend | grep -i fatal
 ```
 
 Confirm the positive case too, or you have only proven the container is
-capable of not starting: open `https://engineeringtools.mirageaec.com` in a
+capable of not starting: open `https://et.mirageaec.com` in a
 fresh incognito window. You must be sent to MAEC One's sign-in and, after
 signing in, land back in Engineering Tools. If Core is down, every page says
 "MAEC One is unavailable" — the gate never lets a request through unchecked.

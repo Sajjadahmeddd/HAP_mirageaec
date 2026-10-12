@@ -63,3 +63,36 @@ def test_no_deployment_file_still_configures_the_password_login():
 def test_the_entrypoint_is_lf_only():
     """A CRLF shebang fails at container start with 'no such file or directory'."""
     assert b"\r" not in (ROOT / "backend" / "docker-entrypoint.sh").read_bytes()
+
+
+# ------------------------------------------- running next to the old stack
+OLD_SUBNET = "172.30.57.0/24"
+CORE_SUBNET = "172.31.250.0/24"
+
+
+def test_the_project_name_is_set_not_derived_from_the_folder():
+    assert re.search(r"^name:\s*maec-et\s*$", _read("docker-compose.yml"), re.M)
+
+
+def test_it_publishes_on_loopback_at_et_port_not_80():
+    compose = _read("docker-compose.yml")
+    assert '"127.0.0.1:${ET_PORT:-8081}:80"' in compose
+    assert '"127.0.0.1:80:80"' not in compose
+
+
+def test_its_network_is_its_own_and_overlaps_neither_neighbour():
+    import ipaddress
+    compose = _read("docker-compose.yml")
+    assert re.search(r"name:\s*maec_et_net", compose)
+    default = re.search(r'subnet:\s*"\$\{ET_NET_SUBNET:-([^}]+)\}"', compose).group(1)
+    ours = ipaddress.ip_network(default)
+    for neighbour in (OLD_SUBNET, CORE_SUBNET):
+        assert not ours.overlaps(ipaddress.ip_network(neighbour)), neighbour
+
+
+def test_it_joins_core_s_network_as_external():
+    compose = _read("docker-compose.yml")
+    block = compose[compose.index("  maec_core_net:"):]
+    assert "external: true" in block
+    assert "name: maec_core_net" in block
+

@@ -67,18 +67,6 @@ def check_url() -> str:
     return f"{core_url()}/api/gate/check"
 
 
-def behind_proxy() -> bool:
-    """True where this service runs behind a proxy it trusts.
-
-    FORWARDED_ALLOW_IPS is the variable uvicorn itself reads for
-    --forwarded-allow-ips; the container sets it to the Docker network's
-    range, so it is set exactly where uvicorn is trusting nginx for
-    X-Forwarded-Proto. It is the same switch here for X-Forwarded-Host, which
-    uvicorn does not read. Unset (a developer's machine), the header is ignored.
-    """
-    return bool(os.environ.get("FORWARDED_ALLOW_IPS", "").strip())
-
-
 def missing() -> list[str]:
     return [name for name in REQUIRED if not os.environ.get(name, "").strip()]
 

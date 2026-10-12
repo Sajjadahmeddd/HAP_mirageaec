@@ -55,10 +55,10 @@ Two optional settings:
 | Variable | Value |
 |---|---|
 | `CORE_PUBLIC_URL` | Core as a *browser* reaches it — where "Sign out" and the no-access page link. Unset, it is `CORE_URL`, which is right locally. In the container `CORE_URL` is Docker-internal (`http://maec-core:8000`), so this is `https://auth.mirageaec.com` there. |
-| `FORWARDED_ALLOW_IPS` | The proxies trusted for `X-Forwarded-Proto` (uvicorn) and `X-Forwarded-Host` (the gate). Set only in the container, to the Docker network's range. |
+| `TRUSTED_PROXIES` | The socket peers whose `X-Forwarded-Proto` and `X-Forwarded-Host` are believed (`proxy.py`); from anyone else they are ignored. Unset trusts nobody. In the container it is the nginx network's range (`maec_et_net`), and never Core's shared network. `*` is refused. |
 
 Behind Caddy and the nginx container the gate sends Core the address the
-browser used (`https://engineeringtools.mirageaec.com/...`), not the internal
+browser used (`https://et.mirageaec.com/...`), not the internal
 hop's — Core only follows a sign-in's `next` back to an app's own address.
 
 Running locally (PowerShell):

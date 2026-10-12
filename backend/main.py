@@ -22,6 +22,7 @@ from hap_converter import __version__
 from .deps import airsizer_config, hapext_config
 from .maec_auth import config as auth_config
 from .maec_auth import gate as auth_gate
+from .maec_auth import proxy as auth_proxy
 from .maec_auth import routes as auth_routes
 from .routers import airsizer, hapext, rebadge
 
@@ -38,6 +39,7 @@ async def lifespan(_app: FastAPI):
     where = "on Render" if os.environ.get("RENDER") else "locally"
     auth_gate.configure_logging()
     auth_config.require_all()
+    auth_proxy.check()
     print(f"Engineering Tools starting {where}.")
     print(f"  auth: gate of {auth_config.core_url()} (app {auth_config.app_key()})")
     yield
@@ -137,6 +139,12 @@ if os.environ.get("MAEC_DEV"):
         allow_headers=["*"],
     )
 
+# Truly last, so truly outermost: the gate, the HSTS decision and everything
+# else see the scheme and host the browser used rather than the proxy hop's —
+# believed only from a peer in TRUSTED_PROXIES. uvicorn runs with
+# --no-proxy-headers so this is the only list (maec_auth/proxy.py says why).
+app.add_middleware(auth_proxy.TrustedProxyHeaders)
+
 app.include_router(auth_routes.router)
 app.include_router(hapext.router)
 app.include_router(airsizer.router)
@@ -202,7 +210,9 @@ def run() -> None:
         raise SystemExit(1)
 
     print("MAEC is running at http://127.0.0.1:8000   (Ctrl+C to stop)")
-    uvicorn.run(app, host="127.0.0.1", port=8000, timeout_keep_alive=120)
+    # proxy_headers off: the app applies its own trusted list (TRUSTED_PROXIES)
+    uvicorn.run(app, host="127.0.0.1", port=8000, timeout_keep_alive=120,
+                proxy_headers=False)
 
 
 if __name__ == "__main__":

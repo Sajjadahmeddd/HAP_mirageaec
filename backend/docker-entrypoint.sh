@@ -94,27 +94,28 @@ if [ -n "${MAEC_DEV:-}" ]; then
 fi
 
 # --- the proxy chain: Caddy -> nginx -> here ----------------------------
-# Behind Caddy and the nginx container this process sees plain http. With
-# --proxy-headers uvicorn takes the scheme from Caddy's X-Forwarded-Proto,
-# which nginx passes through -- but only from peers in --forwarded-allow-ips.
-# Unset, uvicorn would trust 127.0.0.1 alone, never the nginx container, and
-# the app would believe it is on http://: the return-after-sign-in address it
-# hands MAEC One Core would then fail Core's check.
-if [ -z "${FORWARDED_ALLOW_IPS:-}" ]; then
-    echo "FATAL: FORWARDED_ALLOW_IPS is unset. It must be the Docker network's" >&2
-    echo "       range (docker-compose.yml sets it to maec_net's subnet)." >&2
+# Behind Caddy and the nginx container this process sees plain http. The app
+# takes the scheme and host from Caddy's X-Forwarded-Proto and
+# X-Forwarded-Host, which nginx passes through -- but only from a socket peer
+# in TRUSTED_PROXIES (backend/maec_auth/proxy.py). Unset, it trusts nobody and
+# believes it is on http://: the return-after-sign-in address it hands MAEC One
+# Core would then fail Core's check.
+if [ -z "${TRUSTED_PROXIES:-}" ]; then
+    echo "FATAL: TRUSTED_PROXIES is unset. It must be the Docker network's" >&2
+    echo "       range (docker-compose.yml sets it to et_net's subnet)." >&2
     exit 1
 fi
 
 echo "MAEC backend: ${WEB_CONCURRENCY} worker process(es) (${_source}), port ${PORT}"
-echo "MAEC backend: trusting proxy headers from ${FORWARDED_ALLOW_IPS}"
+echo "MAEC backend: trusting proxy headers from ${TRUSTED_PROXIES}"
 
 # uvicorn --workers, not gunicorn: gunicorn's default 30 s worker timeout
-# would kill a worker mid-parse on a large drawing set.
+# would kill a worker mid-parse on a large drawing set. --no-proxy-headers:
+# the app applies TRUSTED_PROXIES itself, per socket peer; uvicorn's own
+# list would replace the peer address before the app could check it.
 exec uvicorn backend.main:app \
     --host 0.0.0.0 \
     --port "${PORT}" \
     --workers "${WEB_CONCURRENCY}" \
-    --proxy-headers \
-    --forwarded-allow-ips "${FORWARDED_ALLOW_IPS}" \
+    --no-proxy-headers \
     --timeout-keep-alive 75

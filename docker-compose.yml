@@ -5,7 +5,11 @@
 #     being edited. The backend derives its worker count from the CPU
 #     actually available to it at startup.
 
-name: maec
+# Set here, not derived from the folder name: this stack runs NEXT TO the old
+# Engineering Tools on the same VPS (project "maec", 127.0.0.1:80,
+# maec_maec_net, 172.30.57.0/24) and must collide with none of it. Going live
+# is a Caddy switch from localhost:80 to localhost:${ET_PORT}.
+name: maec-et
 
 services:
   backend:
@@ -37,18 +41,20 @@ services:
 
       # MAEC_DEV is deliberately absent — it enables permissive CORS.
 
-      # The proxies uvicorn believes X-Forwarded-Proto from (and the app
-      # X-Forwarded-Host): exactly maec_net's subnet below, where the nginx
-      # container lives. Keep the two equal if either is changed.
-      FORWARDED_ALLOW_IPS: "172.30.57.0/24"
+      # The only peers whose X-Forwarded-Proto and X-Forwarded-Host are
+      # believed (backend/maec_auth/proxy.py): et_net's range, where the nginx
+      # container lives. Built from the same variable as the subnet below, so
+      # the two cannot drift. NOT maec_core_net: Core and any other app there
+      # reach this backend directly, and must not choose its scheme or host.
+      TRUSTED_PROXIES: "${ET_NET_SUBNET:-172.30.81.0/24}"
 
     expose:
       - "8000"          # internal network only — never published to the host
-    # MAEC One Core's compose project joins this network too (external,
-    # as maec_maec_net) under the alias maec-core, so CORE_URL reaches it
-    # here and the gate check never leaves the machine. Bring this stack up
-    # before Core's, which expects the network to exist.
-    networks: [maec_net]
+    # et_net: nginx -> backend. maec_core_net: MAEC One Core's network,
+    # created by Core's compose project, where Core answers as maec-core —
+    # so CORE_URL=http://maec-core:8000 and the gate check never leaves the
+    # machine. Bring Core's stack up first; it owns that network.
+    networks: [et_net, maec_core_net]
 
     tmpfs:
       # Uploads in RAM: faster than the overlay fs, and they cannot outlive
@@ -85,22 +91,31 @@ services:
       # people usually find out about from their logs. The reverse proxy
       # that terminates TLS runs on the same host and reaches this through
       # loopback; nothing else needs to.
-      - "127.0.0.1:80:80"
+      # ET_PORT (default 8081), not 80: the old Engineering Tools keeps
+      # 127.0.0.1:80 until Caddy is switched over.
+      - "127.0.0.1:${ET_PORT:-8081}:80"
     depends_on:
       backend:
         condition: service_healthy
-    networks: [maec_net]
+    networks: [et_net]
     logging:
       driver: json-file
       options: { max-size: "20m", max-file: "5" }
 
 networks:
-  maec_net:
+  et_net:
+    # Named explicitly, and not maec_maec_net: that is the old stack's.
+    name: maec_et_net
     driver: bridge
-    # A fixed subnet, so FORWARDED_ALLOW_IPS above can name it. Docker would
-    # otherwise pick one at creation and the trusted range would be a guess.
-    # If this ever clashes with a network already on the host, choose another
-    # private /24 and change FORWARDED_ALLOW_IPS to match.
+    # A fixed range, so TRUSTED_PROXIES above can name it. It must overlap
+    # neither the old stack's 172.30.57.0/24 nor Core's (172.31.250.0/24 by
+    # default). Check what the host already uses before changing it:
+    #   docker network inspect $(docker network ls -q) --format '{{.Name}} {{range .IPAM.Config}}{{.Subnet}}{{end}}'
     ipam:
       config:
-        - subnet: 172.30.57.0/24
+        - subnet: "${ET_NET_SUBNET:-172.30.81.0/24}"
+  maec_core_net:
+    # MAEC One Core's network, created by its own compose project. External:
+    # this stack joins it and never creates or removes it.
+    external: true
+    name: maec_core_net

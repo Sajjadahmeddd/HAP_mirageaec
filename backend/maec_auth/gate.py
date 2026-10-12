@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 from html import escape
 
 import httpx
@@ -97,28 +96,17 @@ def reset_client() -> None:
     _client, _client_loop = None, None
 
 
-# A host as a proxy may forward it: name or address, optional port. Anything
-# else in X-Forwarded-Host (a path, a user@, a space) is not used.
-_HOST = re.compile(r"^[A-Za-z0-9.-]+(:[0-9]{1,5})?$")
-
-
 def original_url(request: Request) -> str:
     """The address the browser actually used, for Core to send it back to.
 
-    Behind Caddy and nginx this process sees plain http and whatever Host the
-    last hop set. uvicorn's --proxy-headers corrects the scheme from Caddy's
-    X-Forwarded-Proto (when the peer is in --forwarded-allow-ips), so
-    request.url already says https. uvicorn does not read X-Forwarded-Host;
-    it is applied here, under the same trust switch. Core builds the
-    sign-in's `next` from this, and only follows a `next` on an app's own
-    https://... address — so a wrong scheme or host here would land people
-    on the launcher instead of back in Engineering Tools.
+    Behind Caddy and nginx, request.url is already that address: proxy.py
+    applied a trusted proxy's X-Forwarded-Proto and X-Forwarded-Host before
+    this ran, and ignored them from anyone else. Core builds the sign-in's
+    `next` from this and only follows a `next` on an app's own https://
+    address — so a wrong scheme or host here would land people on the
+    launcher instead of back in Engineering Tools.
     """
-    url = request.url
-    forwarded = request.headers.get("x-forwarded-host", "").split(",")[0].strip()
-    if forwarded and config.behind_proxy() and _HOST.match(forwarded):
-        url = url.replace(netloc=forwarded)
-    return str(url)
+    return str(request.url)
 
 
 async def ask_core(request: Request) -> httpx.Response:

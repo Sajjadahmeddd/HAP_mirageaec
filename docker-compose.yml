@@ -15,7 +15,9 @@ services:
     image: maec-backend:latest
     restart: unless-stopped
 
-    # MAEC_EMAIL / MAEC_PASSWORD / MAEC_SECRET_KEY live here.
+    # The gate's settings live here: CORE_URL (Core inside Docker,
+    # http://maec-core:8000), CORE_PUBLIC_URL, MAEC_APP_KEY and
+    # MAEC_GATE_SECRET. See .env.maec.example.
     # Never point this at .env — that belongs to the MAEC One project.
     env_file: .env.maec
 
@@ -27,8 +29,9 @@ services:
       # cores-1 workers. Set it in .env.maec only to override that.
 
       # INTERIM WART — remove when the follow-up commit lands.
-      # main.py keys the Secure cookie flag and HSTS on the presence of
-      # RENDER. Setting it preserves both with zero code change.
+      # main.py keys HSTS on the presence of RENDER (there is no session
+      # cookie here any more: the cookie is MAEC One's). Setting it keeps
+      # HSTS on with zero code change.
       # FOLLOW-UP: rename that check to MAEC_HTTPS and delete this line.
       RENDER: "1"
 
@@ -41,6 +44,10 @@ services:
 
     expose:
       - "8000"          # internal network only — never published to the host
+    # MAEC One Core's compose project joins this network too (external,
+    # as maec_maec_net) under the alias maec-core, so CORE_URL reaches it
+    # here and the gate check never leaves the machine. Bring this stack up
+    # before Core's, which expects the network to exist.
     networks: [maec_net]
 
     tmpfs:

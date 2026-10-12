@@ -27,5 +27,6 @@ def me(request: Request) -> JSONResponse:
         # Which product tabs to render, from nav_hidden and the view permissions.
         "modules": guard.visible_modules(maec),
         # Where "Sign out" goes: signing out at MAEC One signs out everywhere.
-        "core_url": config.core_url(),
+        # The browser follows it, so it is Core's public address.
+        "core_url": config.core_public_url(),
     }, headers={"Cache-Control": "no-store"})

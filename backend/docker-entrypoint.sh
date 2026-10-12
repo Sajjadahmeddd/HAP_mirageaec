@@ -57,38 +57,31 @@ else
 fi
 export WEB_CONCURRENCY
 
-# --- MAEC_SECRET_KEY is load-bearing under multi-worker ----------------
-# auth.py falls back to secrets.token_urlsafe(32) when this is unset, and
-# that fallback is evaluated PER PROCESS. With more than one worker each
-# signs session cookies with a different key, so most requests fail
-# verification and users are bounced to the login screen at random.
-if [ -z "${MAEC_SECRET_KEY:-}" ] || \
-   [ "${MAEC_SECRET_KEY}" = "generate-a-long-random-value" ]; then
-    echo "FATAL: MAEC_SECRET_KEY is unset or still the placeholder value." >&2
-    echo "       With more than one worker this causes random logouts," >&2
-    echo "       because each worker process would sign cookies with a" >&2
-    echo "       different randomly-generated key." >&2
-    echo "" >&2
-    echo "       Generate one:" >&2
-    echo '         python3 -c "import secrets; print(secrets.token_urlsafe(48))"' >&2
-    echo "       Then set MAEC_SECRET_KEY in .env.maec" >&2
+# --- MAEC One's gate: refuse to start without it -----------------------
+# Engineering Tools signs nobody in; every request is checked with MAEC One
+# Core. The app itself refuses to start without these; failing here as well
+# turns that into one clear line at the top of the container log instead of
+# a traceback further down. Set them in .env.maec.
+for _name in CORE_URL CORE_PUBLIC_URL MAEC_APP_KEY MAEC_GATE_SECRET; do
+    eval "_value=\${${_name}:-}"
+    if [ -z "${_value}" ]; then
+        echo "FATAL: ${_name} is unset. Set it in .env.maec (see .env.maec.example)." >&2
+        exit 1
+    fi
+done
+
+if [ "${MAEC_GATE_SECRET}" = "generate-on-the-server" ]; then
+    echo "FATAL: MAEC_GATE_SECRET is still the placeholder. Generate one on the" >&2
+    echo "       server and put the SAME value in Core's GATE_SECRETS:" >&2
+    echo '         python3 -c "import secrets; print(secrets.token_urlsafe(32))"' >&2
     exit 1
 fi
 
-# --- refuse to start without a usable password --------------------------
-# There is no fallback password any more. The app itself refuses to start in
-# this state; failing here as well turns it into one clear line at the top of
-# the container log instead of a traceback further down.
-if [ -z "${MAEC_PASSWORD:-}" ]; then
-    echo "FATAL: MAEC_PASSWORD is unset. There is no built-in password to" >&2
-    echo "       fall back on, so the app cannot start." >&2
-    echo "       Set MAEC_PASSWORD in .env.maec to at least 8 characters." >&2
-    exit 1
-fi
-
-if [ "${#MAEC_PASSWORD}" -lt 8 ]; then
-    echo "FATAL: MAEC_PASSWORD is ${#MAEC_PASSWORD} characters." >&2
-    echo "       It must be at least 8. Set a longer one in .env.maec." >&2
+# Core refuses a gate secret shorter than 32 characters, so this one would
+# lock everybody out with a 403 on every request. Say so now instead.
+if [ "${#MAEC_GATE_SECRET}" -lt 32 ]; then
+    echo "FATAL: MAEC_GATE_SECRET is ${#MAEC_GATE_SECRET} characters; MAEC One" >&2
+    echo "       requires at least 32. Generate a new one, in both places." >&2
     exit 1
 fi
 

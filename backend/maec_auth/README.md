@@ -50,8 +50,16 @@ refuses to start, naming what is absent.
 | `MAEC_APP_KEY` | `engineering` |
 | `MAEC_GATE_SECRET` | this app's secret in Core's `GATE_SECRETS` (`engineering=<secret>`) |
 
-`CORE_URL` is also where the "Sign out" link points, so it must be an address
-the browser can open too. Locally it is.
+Two optional settings:
+
+| Variable | Value |
+|---|---|
+| `CORE_PUBLIC_URL` | Core as a *browser* reaches it — where "Sign out" and the no-access page link. Unset, it is `CORE_URL`, which is right locally. In the container `CORE_URL` is Docker-internal (`http://maec-core:8000`), so this is `https://auth.mirageaec.com` there. |
+| `FORWARDED_ALLOW_IPS` | The proxies trusted for `X-Forwarded-Proto` (uvicorn) and `X-Forwarded-Host` (the gate). Set only in the container, to the Docker network's range. |
+
+Behind Caddy and the nginx container the gate sends Core the address the
+browser used (`https://engineeringtools.mirageaec.com/...`), not the internal
+hop's — Core only follows a sign-in's `next` back to an app's own address.
 
 Running locally (PowerShell):
 

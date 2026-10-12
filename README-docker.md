@@ -65,23 +65,29 @@ Two `.gitignore` edits are required:
 The repository root already has a `.env`, and it belongs to **MAEC One** —
 it carries that project's `DATABASE_URL`, `SESSION_SECRET` and
 `BOOTSTRAP_ADMIN_PASSWORD`. Pointing `env_file:` at it would inject another
-project's database credentials into this container *and* boot the app on
-the fallback password committed in `auth.py`.
+project's database credentials into this container.
 
 So this stack reads `.env.maec`, and nothing here ever touches `.env`.
 
 ```bash
 cp .env.maec.example .env.maec
 chmod 600 .env.maec
-python3 -c "import secrets; print(secrets.token_urlsafe(48))"   # → MAEC_SECRET_KEY
-nano .env.maec                          # set MAEC_PASSWORD too (min 8 chars)
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"   # → MAEC_GATE_SECRET
+nano .env.maec       # the same secret goes into Core's GATE_SECRETS
 ```
 
-**`MAEC_SECRET_KEY` is mandatory, not tuning.** `auth.py` falls back to a
-random key when it is unset, and that fallback is evaluated *per process*.
-With six workers that is six different cookie-signing keys, so roughly five
-requests in six fail verification and users are logged out at random. The
-container refuses to start without it.
+**Sign-in is MAEC One Core's.** Engineering Tools holds no password and no
+session: on every request its backend asks Core, over the Docker network,
+whether the browser's MAEC One cookie belongs to someone with a seat
+(`backend/maec_auth/README.md`). `.env.maec` carries the four settings that
+needs — `CORE_URL` (Core inside Docker, `http://maec-core:8000`),
+`CORE_PUBLIC_URL` (Core as a browser reaches it), `MAEC_APP_KEY` and
+`MAEC_GATE_SECRET` — and the container refuses to start without them. With
+no session held here, any number of workers is fine.
+
+Core's compose project joins this stack's network, `maec_maec_net`, under
+the alias `maec-core`, so **bring this stack up first**: Core's expects the
+network to exist.
 
 ---
 
@@ -123,7 +129,7 @@ docker compose run --rm backend sh            # shell in the image
 And the guard can be proven live:
 
 ```bash
-docker compose run --rm -e MAEC_SECRET_KEY= backend    # must exit 1, FATAL
+docker compose run --rm -e MAEC_GATE_SECRET= backend   # must exit 1, FATAL
 ```
 
 **Verify parity before trusting it:** run the 212-page DCG BREEZE report
@@ -182,12 +188,18 @@ publishes ports through DNAT rules that are evaluated *before* ufw's, so a
 port published as `80:80` stays reachable from the internet while `ufw
 status` still reads "deny". Keep the `127.0.0.1:` prefix on that line.
 
-**One ordering trap:** `RENDER=1` is set in compose so the session cookie
-keeps its `Secure` flag and HSTS stays on. Browsers refuse `Secure` cookies
-over plain HTTP on anything other than `localhost` — so on the VM, sign-in
-will fail over `http://<raw-ip>` until Caddy is in front. Either bring up
-HTTPS in the same session, or drop `RENDER` for the first smoke test and
-restore it before anyone else gets the URL.
+**One ordering trap:** sign-in needs the real address. MAEC One's cookie is
+set for `.mirageaec.com` and is `Secure`, so a browser sends it only to
+`https://…mirageaec.com` hosts — over `http://<raw-ip>` nobody is ever
+signed in. Bring Caddy up before testing sign-in.
+
+**The scheme reaches the app through two proxies.** Caddy terminates TLS
+and sets `X-Forwarded-Proto: https` and `X-Forwarded-Host`; the nginx
+container passes both through unchanged (`frontend/nginx.conf`); uvicorn
+believes them only from `FORWARDED_ALLOW_IPS`, which compose sets to
+`maec_net`'s fixed subnet. Without all three links the app thinks it is on
+`http://`, and Core refuses the return-after-sign-in address, so people
+land on the MAEC One launcher instead of back in Engineering Tools.
 
 ---
 
@@ -264,26 +276,23 @@ Run the scan from outside the hosting provider's network where you can.
 Some providers filter between their own hosts, which makes a scan from a
 neighbouring VM look cleaner than the internet's view of the same box.
 
-### Trap 3 — the service now refuses to start without a password
+### Trap 3 — the service refuses to start without MAEC One's settings
 
-`MAEC_PASSWORD` is mandatory and must be at least 8 characters. There is no
-built-in fallback any more, so a missing or short value is not a warning —
-the entrypoint exits and the container does not come up. `MAEC_SECRET_KEY`
-is mandatory for the same reason (see *Why `.env.maec` and not `.env`*).
+`CORE_URL`, `CORE_PUBLIC_URL`, `MAEC_APP_KEY` and `MAEC_GATE_SECRET` are
+mandatory, the secret may not be the placeholder, and it must be at least 32
+characters (Core refuses anything shorter, which would lock everyone out with
+a 403). A missing value is not a warning — the entrypoint exits and the
+container does not come up.
 
 ```bash
 docker compose -f docker-compose.yml logs frontend backend | grep -i fatal
 ```
 
 Confirm the positive case too, or you have only proven the container is
-capable of not starting: sign in once over HTTPS and watch the log line.
-
-```
-INFO: sign-in SUCCEEDED at 2026-09-22T07:16:49+00:00: email=... client=...
-```
-
-Failed attempts are logged as `WARNING` with the same shape. The password is
-never logged, in any form.
+capable of not starting: open `https://engineeringtools.mirageaec.com` in a
+fresh incognito window. You must be sent to MAEC One's sign-in and, after
+signing in, land back in Engineering Tools. If Core is down, every page says
+"MAEC One is unavailable" — the gate never lets a request through unchecked.
 
 ### Trap 4 — the laptop override following you to the server
 
@@ -366,9 +375,8 @@ API and the HTML document will disagree.
 
 ## Known follow-ups
 
-1. **Rename `RENDER`.** `main.py` keys the `Secure` cookie flag and HSTS on
-   a variable called `RENDER`; compose sets it to `1` so those survive the
-   move. After the VM deployment is green, rename it to something honest
+1. **Rename `RENDER`.** `main.py` keys HSTS on a variable called `RENDER`;
+   compose sets it to `1` so it survives the move. After the VM deployment is green, rename it to something honest
    (`MAEC_HTTPS`) and delete the compose line — a future maintainer on a
    Netcup box should not find a variable called `RENDER`.
 2. ~~**Two failing rebadge tests.**~~ *Resolved in b6435c9* — the stale

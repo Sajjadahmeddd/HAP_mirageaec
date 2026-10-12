@@ -42,6 +42,16 @@ def core_url() -> str:
     return _required("CORE_URL").rstrip("/")
 
 
+def core_public_url() -> str:
+    """Core's address as a BROWSER reaches it — where "Sign out" and the
+    no-access page's link point. Optional: unset, it is CORE_URL, which is
+    right wherever one address serves both (a developer's machine). In the
+    container CORE_URL is Docker-internal (http://maec-core:8000), which no
+    browser can open, so this is set there to https://auth.mirageaec.com."""
+    value = os.environ.get("CORE_PUBLIC_URL", "").strip().rstrip("/")
+    return value or core_url()
+
+
 def app_key() -> str:
     """This application's key in Core: `engineering`."""
     return _required("MAEC_APP_KEY")
@@ -67,10 +77,6 @@ def behind_proxy() -> bool:
     uvicorn does not read. Unset (a developer's machine), the header is ignored.
     """
     return bool(os.environ.get("FORWARDED_ALLOW_IPS", "").strip())
-
-
-def on_render() -> bool:
-    return bool(os.environ.get("RENDER"))
 
 
 def missing() -> list[str]:

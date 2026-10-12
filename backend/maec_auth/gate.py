@@ -140,7 +140,7 @@ async def ask_core(request: Request) -> httpx.Response:
 def _page(title: str, message: str, status: int) -> HTMLResponse:
     """A plain page with a way back to MAEC One. Every value is escaped."""
     try:
-        home = config.core_url() + "/"
+        home = config.core_public_url() + "/"
     except config.ConfigError:
         home = ""
     link = f'<a href="{escape(home)}">Back to MAEC One</a>' if home else ""

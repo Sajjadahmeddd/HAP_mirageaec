@@ -341,3 +341,28 @@ def test_logging_is_configured_so_info_lines_are_not_dropped():
     before = list(gate.log.handlers)
     gate.configure_logging()          # startup can run more than once
     assert gate.log.handlers == before
+
+
+# ======================================================= public vs internal
+def test_sign_out_points_at_core_s_public_address(engineer_client, monkeypatch):
+    """In the container CORE_URL is Docker-internal (http://maec-core:8000),
+    which no browser can open; links the browser follows use CORE_PUBLIC_URL."""
+    monkeypatch.setenv("CORE_URL", "http://maec-core:8000")
+    monkeypatch.setenv("CORE_PUBLIC_URL", "https://auth.mirageaec.com")
+    assert engineer_client.get("/api/auth/me").json()["core_url"] == "https://auth.mirageaec.com"
+
+
+def test_the_no_access_page_links_to_core_s_public_address(engineer_client, fake_core,
+                                                           monkeypatch):
+    monkeypatch.setenv("CORE_URL", "http://maec-core:8000")
+    monkeypatch.setenv("CORE_PUBLIC_URL", "https://auth.mirageaec.com")
+    fake_core.refused[ENGINEER_SESSION] = (403, "no_access")
+    page = engineer_client.get("/", follow_redirects=False).text
+    assert 'href="https://auth.mirageaec.com/"' in page
+    assert "maec-core" not in page
+
+
+def test_without_a_public_address_links_fall_back_to_core_url(engineer_client, monkeypatch):
+    """One address serves both on a developer's machine."""
+    monkeypatch.delenv("CORE_PUBLIC_URL", raising=False)
+    assert engineer_client.get("/api/auth/me").json()["core_url"] == CORE_URL

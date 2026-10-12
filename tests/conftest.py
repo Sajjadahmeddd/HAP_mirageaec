@@ -114,6 +114,10 @@ def gate_settings(monkeypatch, fake_core):
     monkeypatch.setenv("MAEC_APP_KEY", APP_KEY)
     monkeypatch.setenv("MAEC_GATE_SECRET", GATE_SECRET)
     monkeypatch.delenv("RENDER", raising=False)
+    # Optional settings a developer may have exported: tests that need them
+    # set them, so a value from the machine cannot change an answer.
+    monkeypatch.delenv("CORE_PUBLIC_URL", raising=False)
+    monkeypatch.delenv("FORWARDED_ALLOW_IPS", raising=False)
     monkeypatch.setattr(gate, "transport", httpx.MockTransport(fake_core.handler))
     gate.reset_client()
     yield

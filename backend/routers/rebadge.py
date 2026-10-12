@@ -28,6 +28,27 @@ from ..deps import MAX_UPLOAD_BYTES
 
 router = APIRouter(prefix="/api/rebadge", tags=["rebadge"])
 
+
+# These sheets' title blocks are set in Arial Narrow, but the rebadger writes
+# in Helvetica, which is wider -- so editor.py steps the size down a quarter
+# point at a time until the value fits, and says so. On this drawing set that
+# is not the exception, it is the normal path: every sheet reports it, every
+# time. The note tells an engineer nothing they can act on, it buried the two
+# warnings that DO matter, and 28 copies of it overflowed nginx's 4 KB header
+# buffer, which returned 502 on a batch the backend had already completed.
+#
+# Dropped here rather than in the engine, so the engine stays byte-identical.
+# This hides only the notification: the value is still shrunk to fit exactly
+# as before, and text that cannot fit even at the floor still raises
+# CellOverflowError in editor.py and fails that sheet properly.
+_COSMETIC = ("text reduced from",)
+
+
+def _worth_reporting(warnings: list[str]) -> list[str]:
+    """Warnings an engineer can act on. See _COSMETIC above."""
+    return [w for w in warnings if not any(c in w for c in _COSMETIC)]
+
+
 # These three routes are declared `def`, not `async def`, on purpose. Every one
 # of them spends seconds inside PyMuPDF, which is blocking C code. An `async`
 # route runs on the event loop itself, so that work stalls the entire worker —
@@ -100,7 +121,6 @@ def validate(files: list[UploadFile] = File(...)):
             "labels_found": check.labels_found,
             "missing_labels": check.missing_labels(),
             "current": check.current,
-            "blank_row_available": check.blank_row_available,
             "warnings": check.warnings,
             "errors": check.errors,
         })
@@ -124,8 +144,25 @@ def preview(file: UploadFile = File(...), payload: str = Form(...)):
     return Response(
         content=png,
         media_type="image/png",
-        headers={"X-Rebadge-Warnings": json.dumps(result.warnings)},
+        headers={"X-Rebadge-Warnings": json.dumps(_worth_reporting(result.warnings))},
     )
+
+
+# A response header block must fit in ONE proxy buffer, and the default is a
+# single memory page -- 4096 bytes. frontend/nginx.conf raises ours to 16k,
+# but that only helps where we own the proxy; this app also runs on Render,
+# where we do not. So the bound belongs here as well.
+#
+# Bounded by BYTES, not entry count. "Cap it at 20 sheets" bounds nothing:
+# measured on real batches, one entry is 165 B for a rejected sheet but 323 B
+# for one carrying warnings, so twenty of the latter is 6.5 KB -- still over
+# the 4 KB default. A byte budget holds whatever the messages turn out to be.
+#
+# 3000 B leaves room for the JSON envelope plus the ordinary headers
+# (Content-Disposition, ETag, CSP and the rest) inside 4096, and gives better
+# than 5x margin against the 16k nginx now allows.
+_SUMMARY_BUDGET = 3000
+_SUMMARY_MAX_SHEETS = 20
 
 
 def _summary(batch) -> str:
@@ -133,18 +170,46 @@ def _summary(batch) -> str:
 
     Only sheets with something to say are listed: on a 126-sheet set the
     counts carry the rest, and a header has to stay small enough to send.
+
+    warning_count is recomputed from the filtered warnings rather than taken
+    from the batch, so the Export screen's "N informational" always agrees
+    with the rows listed beneath it.
+
+    The list was previously unbounded, which made the ERROR path the overflow
+    path: the header grew largest exactly when something was wrong, so a batch
+    of sheets that all failed would 502 instead of reporting which failed and
+    why. Failed sheets are therefore emitted FIRST, and `truncated` says how
+    many notable sheets did not fit. error_count and warning_count stay full
+    counts, so the Export screen's totals remain correct either way.
     """
+    kept = [(s, _worth_reporting(s.warnings)) for s in batch.sheets]
+    notable = [(s, w) for s, w in kept if w or s.errors or not s.ok]
+    # False sorts before True, so failures lead; the sort is stable, so the
+    # original sheet order survives within each group.
+    notable.sort(key=lambda pair: pair[0].ok)
+
+    entries: list[dict] = []
+    used = 0
+    for sheet, warnings in notable:
+        entry = {"filename": sheet.filename, "ok": sheet.ok,
+                 "previous_rev": sheet.previous_rev, "new_rev": sheet.new_rev,
+                 "warnings": warnings, "errors": sheet.errors}
+        size = len(json.dumps(entry)) + 1          # +1 for the separating comma
+        # Always emit at least one, so a single verbose entry is reported
+        # rather than silently dropped.
+        if entries and (used + size > _SUMMARY_BUDGET
+                        or len(entries) >= _SUMMARY_MAX_SHEETS):
+            break
+        entries.append(entry)
+        used += size
+
     return json.dumps({
         "total": len(batch.sheets),
         "ok_count": batch.ok_count,
         "error_count": batch.error_count,
-        "warning_count": batch.warning_count,
-        "sheets": [
-            {"filename": s.filename, "ok": s.ok,
-             "previous_rev": s.previous_rev, "new_rev": s.new_rev,
-             "warnings": s.warnings, "errors": s.errors}
-            for s in batch.sheets if s.warnings or s.errors or not s.ok
-        ],
+        "warning_count": sum(len(w) for _, w in kept),
+        "sheets": entries,
+        "truncated": len(notable) - len(entries),
     })
 
 

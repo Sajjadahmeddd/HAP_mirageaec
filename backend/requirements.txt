@@ -1,22 +1,29 @@
 # Web service. The engine's own dependencies (pymupdf, openpyxl, pillow) are
 # shared with the desktop build - see ../requirements.txt. PySide6 is NOT
 # needed here: the web app uses the engine only.
-fastapi>=0.110
-uvicorn[standard]>=0.27
-python-multipart>=0.0.9      # every upload route takes an UploadFile
+#
+# EXACT pins, taken from `pip freeze` on the live Render instance. With `>=`
+# ranges Render re-resolved every package to the newest release on each
+# deploy, so any push could silently upgrade the PDF engine -- and these are
+# signed client drawings, where a moved glyph is a real defect. Upgrades now
+# happen deliberately, and an engine-path bump (pymupdf, openpyxl, pillow)
+# must pass the fidelity guard in tools/parity/ before its pin moves.
+#
+# Top-level pins lock the whole engine path: pymupdf and pillow have no Python
+# dependencies and openpyxl has only et_xmlfile. Transitive web dependencies
+# (starlette, pydantic, anyio) still float. That is deliberate, not an
+# oversight -- a full `pip freeze` would also pin uvloop, which is Linux-only,
+# and make `pip install` fail outright on Windows.
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+python-multipart==0.0.32
 
-pymupdf>=1.24
-openpyxl>=3.1
-pillow>=10.0
+pymupdf==1.28.2   # get_cdrawings(callback=...), which the rebadger's title-block read relies on
+openpyxl==3.1.5
+pillow==12.3.0
 
-# Gone with the identity package, which is maec-one-core's now:
-#   sqlalchemy, alembic, psycopg  the identity database and its migrations
-#   argon2-cffi                   password hashing
-#   slowapi                       the per-IP login rate limit
-#   itsdangerous                  starlette's signed-cookie sessions
-#   python-dotenv                 identity/config.py loaded .env; nothing
-#                                 else ever imported it, and after the split
-#                                 this service reads no .env at all
+# Gone with the sign-in that moved to MAEC One Core:
+#   itsdangerous   signed the shared-password session cookie (backend/auth.py)
 #
 # The gate (backend/maec_auth/gate.py): one call to MAEC One Core per request.
 httpx>=0.27

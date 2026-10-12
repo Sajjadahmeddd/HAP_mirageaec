@@ -66,3 +66,34 @@ def save_upload(upload: UploadFile, directory: Path, *, suffixes: tuple[str, ...
     if not size:
         raise HTTPException(status_code=400, detail=f"{name} is empty.")
     return target
+
+
+# A filesystem name component is 255 bytes on every common filesystem; past
+# that the write raises and the request becomes a 500. Well under it.
+_MAX_BASE_NAME = 150
+
+
+def safe_base_name(value: object, default: str) -> str:
+    """A client-supplied output name, reduced to one safe path component.
+
+    `base_name` arrives in the request body and becomes the name of the file
+    the response is written to, so it must never carry a directory. Without
+    this, "../x" or an absolute path wrote outside the scratch directory --
+    Path's `/` REPLACES the left-hand side when the right is absolute.
+
+    Backslashes are treated as separators too: on the Linux server they are
+    ordinary characters, so a Windows-style path using them would otherwise
+    survive as a single odd-looking name. Anything left with no letter or
+    digit in it -- "", ".", "..", "---" -- falls back to the default rather
+    than producing a hidden or empty filename.
+
+    A legitimate name passes through unchanged: this only removes what a
+    real schedule name never contains.
+    """
+    text = str(value or "").replace("\\", "/")
+    name = Path(text).name
+    name = "".join(ch for ch in name if ch.isprintable()).strip()
+    name = name[:_MAX_BASE_NAME]
+    if not any(ch.isalnum() for ch in name):
+        return default
+    return name

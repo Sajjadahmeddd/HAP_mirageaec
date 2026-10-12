@@ -16,7 +16,7 @@
 // silence for a minute reads as a hang.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { rebadge } from '../api'
+import { rebadge, saveFile } from '../api'
 import { FileBadge, InfoCard, StepChips, StepTimeline, formatMb } from '../components.jsx'
 import { REBADGE, save as saveRecent } from '../recents'
 
@@ -57,21 +57,27 @@ function ResultBand({ items }) {
 const BAND_BEFORE = (n) => [
   ['Batch Processing', `${n} sheet(s) selected`],
   ['Branding Consistency', 'Title block will be updated'],
-  ['Metadata Alignment', 'A revision row will be added'],
+  ['Metadata Alignment', 'Latest revision row will be replaced'],
   ['Drawing Preservation', 'Geometry left untouched'],
 ]
 
 const BAND_AFTER = (n) => [
   ['Batch Processing', `${n} sheet(s) processed`],
   ['Branding Consistency', 'Title block aligned'],
-  ['Metadata Alignment', 'Revision history updated'],
+  ['Metadata Alignment', 'Latest revision row replaced'],
   ['Drawing Preservation', 'Geometry unchanged'],
 ]
 
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
                 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
 
-const todayIso = () => new Date().toISOString().slice(0, 10)
+// The engineer's own calendar date, not UTC's: toISOString() is UTC, which in
+// India reads as yesterday until 5:30 in the morning.
+const todayIso = () => {
+  const now = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
 
 /** The format these title blocks print: `03 SEP 2026`, as the sheets already
  *  carry (`14 AUG 2026`). The picker holds ISO; the drawing gets this. */
@@ -81,9 +87,15 @@ function toDrawingDate(iso) {
   return `${day} ${MONTHS[Number(month) - 1]} ${year}`
 }
 
+// What a new rebadge starts with: the values most submissions use, so the
+// common case needs no typing. Every field stays editable.
 const blankInputs = () => ({
-  project_stage: '', sheet_status: '', rev: '',
-  description: '', approved_by: '', dateIso: todayIso(),
+  project_stage: 'TENDER DOCUMENTATION',
+  sheet_status: 'FOR INFORMATION',
+  rev: '0',
+  description: 'ISSUED FOR TENDER',
+  approved_by: 'SK',
+  dateIso: todayIso(),
 })
 
 /** What the six fields are worth right now, in the shape the API takes. */
@@ -475,7 +487,7 @@ function Confirm({ state }) {
       {noop.length > 0 && (
         <div className="banner-interp">
           {noop.length} sheet(s) already carry revision {state.inputs.rev} — rebadging
-          them changes the history but not the revision. Likely a typo; you can proceed.
+          them rewrites that revision's row but not the revision. Likely a typo; you can proceed.
         </div>
       )}
       {excluded.length > 0 && (
@@ -587,6 +599,17 @@ function Export({ state, onRestart, onHome }) {
   const failed = (summary?.sheets || []).filter((s) => !s.ok)
   const isZip = state.result?.name?.toLowerCase().endsWith('.zip')
 
+  // The per-sheet list travels in a response header, which has a hard size
+  // limit, so the server sends `truncated` when it could not fit them all.
+  // Without this the screen would show 19 skipped sheets while the tile
+  // beside it said 55 — the counts are right, but the engineer cannot see
+  // which sheets are missing, and skipped sheets are the ones that matter.
+  // error_count is a full count, so the shortfall in failures is exact;
+  // whatever remains of `truncated` belongs to the notes list.
+  const omitted = summary?.truncated || 0
+  const omittedFailed = Math.max(0, (summary?.error_count || 0) - failed.length)
+  const omittedNotes = Math.max(0, omitted - omittedFailed)
+
   return (
     <>
       <div className="split">
@@ -642,11 +665,20 @@ function Export({ state, onRestart, onHome }) {
                   </li>
                 ))}
               </ul>
+              {omittedNotes > 0 && (
+                <div className="small" style={{ marginTop: 6 }}>
+                  …and {omittedNotes} more sheet(s) with notes are not listed here.
+                  Run the set in smaller batches to see every one.
+                </div>
+              )}
             </div>
           )}
           {failed.length > 0 && (
             <div className="banner-fail">
-              <strong>Skipped</strong>
+              <strong>
+                Skipped
+                {omittedFailed > 0 && ` — showing ${failed.length} of ${summary.error_count}`}
+              </strong>
               <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
                 {failed.map((s) => (
                   <li key={s.filename} className="small">
@@ -654,6 +686,14 @@ function Export({ state, onRestart, onHome }) {
                   </li>
                 ))}
               </ul>
+              {omittedFailed > 0 && (
+                <div className="small" style={{ marginTop: 6 }}>
+                  …and {omittedFailed} more sheet(s) could not be edited, but would
+                  not fit in this report. Run the set in smaller batches to see
+                  every one — no sheet was silently skipped, and the count above
+                  is complete.
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -825,16 +865,10 @@ export default function Wizard({ ctx }) {
       const result = await rebadge.apply(chosen, payloadOf(state.inputs))
       clearInterval(timer)
       setPercent(100)
-      const download = () => {
-        const url = URL.createObjectURL(result.blob)
-        const anchor = document.createElement('a')
-        anchor.href = url
-        anchor.download = result.name
-        document.body.appendChild(anchor)
-        anchor.click()
-        anchor.remove()
-        URL.revokeObjectURL(url)
-      }
+      // The Save As dialog, like every download in the app. The set is
+      // already built and held, so nothing waits between click and dialog.
+      const download = () => saveFile(result.name, result.blob)
+        .catch((err) => set({ error: `Could not save ${result.name}: ${err.message}` }))
       const when = new Date()
       setState((prev) => ({
         ...prev, busy: '', result, download,

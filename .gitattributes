@@ -1,0 +1,25 @@
+# This repository is worked on from Windows (core.autocrlf=true here), but
+# every file it ships runs on Linux inside a container. Normalise to LF in
+# the repository and on checkout, so a Windows clone cannot produce a CRLF
+# file that Linux then refuses.
+#
+# The concrete failure this prevents: backend/docker-entrypoint.sh with a
+# CRLF shebang fails at container start with an opaque
+#   exec /usr/local/bin/docker-entrypoint.sh: no such file or directory
+# because the kernel reads the interpreter as "/bin/sh\r". The Dockerfile
+# also seds \r out as a second line of defence; this stops it arising.
+* text=auto eol=lf
+
+# Belt and braces for the files where a CRLF is fatal rather than untidy.
+*.sh          text eol=lf
+Dockerfile    text eol=lf
+*.conf        text eol=lf
+*.yml         text eol=lf
+
+# Binary assets must never be touched by line-ending conversion.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.ico  binary
+*.pdf  binary
+*.xlsx binary

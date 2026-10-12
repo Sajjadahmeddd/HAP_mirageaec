@@ -36,6 +36,7 @@ async def lifespan(_app: FastAPI):
     exits with the names of what is missing.
     """
     where = "on Render" if os.environ.get("RENDER") else "locally"
+    auth_gate.configure_logging()
     auth_config.require_all()
     print(f"Engineering Tools starting {where}.")
     print(f"  auth: gate of {auth_config.core_url()} (app {auth_config.app_key()})")

@@ -58,6 +58,24 @@ _client: httpx.AsyncClient | None = None
 _client_loop: asyncio.AbstractEventLoop | None = None
 
 
+def configure_logging() -> None:
+    """Make sure the gate's log is actually emitted under uvicorn.
+
+    uvicorn configures its own loggers and leaves the root logger alone, so
+    without this an INFO line (a refused permission) is dropped and only
+    WARNINGs escape, via logging's last-resort handler.
+
+    A handler is added only when nothing else is configured to take it;
+    where the host already set logging up, that configuration wins and this
+    does not double every line. Carried over from main's auth.py.
+    """
+    log.setLevel(logging.INFO)
+    if not log.handlers and not logging.getLogger().handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+        log.addHandler(handler)
+
+
 def exempt(path: str) -> bool:
     return path in EXEMPT or path.startswith(EXEMPT_PREFIXES)
 

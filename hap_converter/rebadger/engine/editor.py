@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 
 import pymupdf
 
-from .locator import Cell, TitleBlock, forget_spans
+from .locator import HISTORY_LABELS, Cell, TitleBlock, forget_spans, search
 from .models import HISTORY_COLUMNS, RebadgeInputs
 
 # Helvetica's cap height as a fraction of point size — what "vertically
@@ -29,6 +29,12 @@ _SIDE_PAD = 3.0
 # How far a value may be shrunk to fit before we would rather warn than
 # quietly print something noticeably smaller than the sheet's other values.
 _MIN_SCALE = 0.6
+# How far inside a revision-table cell's rules the old value is cleared, as
+# (from the column rules, from the row rules). Rows are 11 pt deep with their
+# text set about 2.3 pt clear of the rule on each side, and the header labels
+# start 1.5 pt below the bottom row — so this takes the whole value while
+# staying off the rows above and below and off the headings.
+_TABLE_INSET = (1.0, 0.8)
 
 
 class RedactionError(Exception):
@@ -109,26 +115,39 @@ def draw_centred(page: pymupdf.Page, block: TitleBlock, rect: pymupdf.Rect,
     return warnings
 
 
-def _redact(page: pymupdf.Page, block: TitleBlock, zone: pymupdf.Rect) -> str:
-    """Remove every glyph inside a displayed rect. Returns what was removed.
+def _redact_all(page: pymupdf.Page, block: TitleBlock,
+                zones: list[pymupdf.Rect]) -> list[str]:
+    """Remove every glyph inside each displayed rect, in one pass.
 
-    Images and line art are left alone, and the rect is the value zone rather
-    than the whole cell, so the label above it and the rules around it come
-    through untouched.
+    Returns what was removed from each zone, in order. Images and line art
+    are left alone, and each rect is a value zone rather than a whole cell, so
+    labels and the rules around them come through untouched.
+
+    One `apply_redactions` for all the zones, not one each: on these A1 sheets
+    every call rewrites the page's whole content stream, about 23 ms apiece,
+    so clearing the four revision-row cells separately cost ~70 ms a sheet
+    more than clearing them together — for an identical result.
     """
-    target = (zone * block.derotation).normalize()
-    existing = page.get_text("text", clip=target).strip()
-    page.add_redact_annot(target)
+    targets = [(zone * block.derotation).normalize() for zone in zones]
+    existing = [page.get_text("text", clip=target).strip() for target in targets]
+    for target in targets:
+        page.add_redact_annot(target)
     page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE,
                           graphics=pymupdf.PDF_REDACT_LINE_ART_NONE)
     forget_spans(page)                     # the text page just changed
 
-    remaining = page.get_text("text", clip=target).strip()
-    if remaining:
-        raise RedactionError(
-            f"text survived removal at {tuple(round(v, 1) for v in zone)}: {remaining!r}"
-        )
+    for zone, target in zip(zones, targets):
+        remaining = page.get_text("text", clip=target).strip()
+        if remaining:
+            raise RedactionError(
+                f"text survived removal at {tuple(round(v, 1) for v in zone)}: {remaining!r}"
+            )
     return existing
+
+
+def _redact(page: pymupdf.Page, block: TitleBlock, zone: pymupdf.Rect) -> str:
+    """Remove every glyph inside one displayed rect. Returns what was removed."""
+    return _redact_all(page, block, [zone])[0]
 
 
 def replace_cell(page: pymupdf.Page, block: TitleBlock, cell: Cell,
@@ -154,14 +173,33 @@ def overwrite_revision_cell(page: pymupdf.Page, block: TitleBlock,
     return replace_cell(page, block, block.revision, rev, style)
 
 
-def append_history_row(page: pymupdf.Page, block: TitleBlock,
-                       inputs: RebadgeInputs, row_index: int,
-                       style: TextStyle) -> EditReport:
-    """Write the four new values into one blank row of the revision table.
+def _headings_outside(page: pymupdf.Page, row: pymupdf.Rect) -> dict[str, int]:
+    """How often each table heading is printed anywhere but inside `row`.
 
-    Nothing already in the table is touched: this only ever writes into a row
-    the reader found empty, which is what keeps the revision history a
-    history. The row is chosen by the caller (`reader.target_row_index`).
+    Counted outside the row because a search is a substring match: an old
+    description reading "REVISED LAYOUT" contains REV, and removing it is the
+    point, not a lost heading.
+    """
+    matrix = page.rotation_matrix
+    return {name: sum(1 for hit in search(page, name) if not (hit * matrix).intersects(row))
+            for name in HISTORY_LABELS}
+
+
+def overwrite_history_row(page: pymupdf.Page, block: TitleBlock,
+                          inputs: RebadgeInputs, row_index: int,
+                          style: TextStyle) -> EditReport:
+    """Replace the four values in one row of the revision table.
+
+    The row is the sheet's latest entry, chosen by `reader.overwrite_row_index`.
+    Each cell is redacted before anything is written, for the same reason the
+    stage and status are: the old revision's text has to leave the file, not
+    sit selectable underneath the new one. All four cells are cleared in one
+    pass before any are written, so no redaction can reach a value just drawn
+    beside it.
+
+    Only this row changes. The clearing zone stays inside its rules, and the
+    headings directly below the bottom row are counted before and after, so
+    a clip that took one would fail the sheet rather than ship it.
     """
     report = EditReport()
     table = block.history
@@ -172,6 +210,20 @@ def append_history_row(page: pymupdf.Page, block: TitleBlock,
         "date": inputs.date,
         "approved_by": inputs.approved_by,
     }
+
+    headings = _headings_outside(page, row)
+    dx, dy = _TABLE_INSET
+    zones = []
+    for key in HISTORY_COLUMNS:
+        cell_rect = table.cell(row, key)
+        zones.append(pymupdf.Rect(cell_rect.x0 + dx, cell_rect.y0 + dy,
+                                  cell_rect.x1 - dx, cell_rect.y1 - dy))
+    report.removed += [text for text in _redact_all(page, block, zones) if text]
+    for name, count in _headings_outside(page, row).items():
+        if count < headings[name]:
+            raise RedactionError(
+                f"the {name!r} heading was removed along with the old revision row")
+
     for key in HISTORY_COLUMNS:
         cell_rect = table.cell(row, key)
         report.warnings += draw_centred(page, block, cell_rect, values[key],

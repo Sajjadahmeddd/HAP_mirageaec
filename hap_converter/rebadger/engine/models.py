@@ -64,7 +64,6 @@ class SheetCheck:
     rotation: int = 0
     labels_found: dict[str, bool] = field(default_factory=dict)
     current: dict = field(default_factory=dict)   # stage/status/rev/history_rows
-    blank_row_available: bool = False
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 

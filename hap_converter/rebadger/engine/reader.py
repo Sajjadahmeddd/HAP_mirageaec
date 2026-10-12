@@ -77,21 +77,25 @@ def topmost_filled(rows: list[HistoryRow]) -> int | None:
     return None
 
 
-def target_row_index(rows: list[HistoryRow]) -> int | None:
-    """Where the next revision goes: the blank row above the topmost filled one.
+def overwrite_row_index(rows: list[HistoryRow]) -> int:
+    """The revision row a rebadge writes over: the sheet's latest entry.
 
-    None means the table is full — every row above the newest entry is taken.
-    A sheet in that state is reported and skipped rather than guessed at.
+    The table fills from the bottom up, so the latest entry is the topmost
+    filled row. Its four values are replaced where they stand — a rebadge
+    re-issues the sheet under new values rather than adding a row. Rows below
+    it are older revisions and are left exactly as they are.
+
+    An empty table has no entry to replace, so the values go where the first
+    entry would have: the bottom row. Either way there is always somewhere to
+    write, which is why a full table is no longer a reason to skip a sheet.
     """
     filled = topmost_filled(rows)
-    if filled is None:
-        return len(rows) - 1        # nothing written yet: start at the bottom
-    return filled - 1 if filled > 0 else None
+    return len(rows) - 1 if filled is None else filled
 
 
 def history_style(page: pymupdf.Page, block: TitleBlock,
                   rows: list[HistoryRow]) -> tuple[float, bool]:
-    """Font size and weight of the newest existing row, so a new row matches.
+    """Font size and weight of the newest existing row, so its rewrite matches.
 
     Falls back to the header labels' own size when the table is empty, which
     keeps a first entry in proportion rather than defaulting to something

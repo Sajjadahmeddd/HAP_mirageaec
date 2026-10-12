@@ -123,16 +123,17 @@ export default function Home({ ctx }) {
             <li>Import one or many A1 drawing sheets exported from your CAD tool.</li>
             <li>
               Each sheet is checked: the title block must be found by its printed
-              labels, and the revision table must have a blank row to grow into.
+              labels and its revision table read.
             </li>
             <li>
               Give the six values once. They are applied to every sheet — that is
               what rebadging a submission set means.
             </li>
             <li>
-              Project Stage and Sheet Status are replaced in place: the old text is
-              removed from the file, not painted over. The revision history gains a
-              new row above the newest one; nothing already there is touched.
+              All six values are replaced in place — Project Stage, Sheet Status,
+              the REVISION cell, and the latest revision row (Rev, Description, Date,
+              Approved By). No new row is added, and the old text is removed from the
+              file, not painted over.
             </li>
             <li>
               The drawing itself is never edited, and your originals are never

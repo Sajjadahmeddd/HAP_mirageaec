@@ -328,3 +328,16 @@ def test_the_catch_all_does_not_serve_files_outside_the_bundle(engineer_client, 
     assert response.status_code == 200
     assert response.content == index
     assert b"FastAPI" not in response.content
+
+
+# ================================================================== logging
+def test_logging_is_configured_so_info_lines_are_not_dropped():
+    """uvicorn leaves the root logger alone, so a refused permission (INFO)
+    would go unheard. Carried over from main's sign-in log test."""
+    import logging
+    gate.configure_logging()
+    assert gate.log.level == logging.INFO
+
+    before = list(gate.log.handlers)
+    gate.configure_logging()          # startup can run more than once
+    assert gate.log.handlers == before

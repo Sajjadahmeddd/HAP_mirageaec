@@ -1,7 +1,12 @@
+# The three engine packages are pinned to the SAME versions as
+# backend/requirements.txt, so the desktop build and the web app parse
+# and write drawings identically. Two engines producing different output
+# from one signed drawing is the failure the pins exist to prevent.
+# PySide6 and the build tools are UI/packaging only and stay ranged.
 pyside6>=6.6
-pymupdf>=1.24
-openpyxl>=3.1
-pillow>=10.0
+pymupdf==1.28.2
+openpyxl==3.1.5
+pillow==12.3.0
 pytest>=8.0
 
 # build only (packaging the exe / installer - see build/build.md)

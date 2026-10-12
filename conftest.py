@@ -14,12 +14,23 @@ The real report + reference Excel live in tests/fixtures/ (see
 tests/test_real_report.py, skipped when absent).
 """
 
+import os
 from pathlib import Path
 
 import pymupdf
 import pytest
 
 from hap_converter.engine import config as config_mod
+
+# The suite runs against a known environment, not whatever the machine running
+# it exports. RENDER turns on HSTS, and docker-compose.yml sets RENDER=1, so
+# running the suite inside the container would inherit it; MAEC_DEV opens
+# permissive CORS. Both are cleared here, at import, before backend.main is
+# imported during collection. Tests that need one of them set it themselves
+# with setenv. (The gate's own settings, CORE_URL and friends, are set per
+# test by tests/conftest.py, so an exported value cannot leak in either.)
+for _machine_variable in ("RENDER", "MAEC_DEV"):
+    os.environ.pop(_machine_variable, None)
 
 CONFIG_PATH = Path(__file__).parent / "config" / "mapping.json"
 

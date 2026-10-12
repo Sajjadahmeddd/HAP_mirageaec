@@ -122,6 +122,28 @@ def _place_logo(ws, logo_path: str) -> None:
 _MIN_HEADER_COLS = 8
 
 
+def keep_as_text(cell):
+    """Stop a value that begins with "=" from becoming a live formula.
+
+    Excel treats a cell starting with "=" as a formula, so a space name or a
+    project detail typed as "=cmd|..." would be evaluated when the schedule
+    is opened. openpyxl's `value` setter infers the type from that leading
+    "=", so the type is corrected here, *after* assignment.
+
+    `data_type` is used rather than openpyxl's quotePrefix because
+    quotePrefix lives in the style array: it would alter the styling of every
+    affected cell, where this changes nothing but the recorded type. A value
+    not starting with "=" is written exactly as it was before.
+
+    Every writer that puts an extracted or user-supplied string into a cell
+    calls this. The cell is returned so it can be wrapped around a
+    `ws.cell(...)` call in place.
+    """
+    if isinstance(cell.value, str) and cell.value.startswith("="):
+        cell.data_type = "s"
+    return cell
+
+
 def write_project_header(
     ws, details: dict[str, str], num_cols: int, title_text: str
 ) -> None:
@@ -153,13 +175,17 @@ def write_project_header(
         left_label.font = label_font
         left_label.alignment = _left
         ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=6)
-        ws.cell(row=row, column=2, value=details.get(l_key, "").strip()).alignment = _left
+        keep_as_text(
+            ws.cell(row=row, column=2, value=details.get(l_key, "").strip())
+        ).alignment = _left
 
         right_label = ws.cell(row=row, column=7, value=r_label)
         right_label.font = label_font
         right_label.alignment = _left
         ws.merge_cells(start_row=row, start_column=8, end_row=row, end_column=span)
-        ws.cell(row=row, column=8, value=details.get(r_key, "").strip()).alignment = _left
+        keep_as_text(
+            ws.cell(row=row, column=8, value=details.get(r_key, "").strip())
+        ).alignment = _left
 
 
 def write_fcu_xlsx(
@@ -178,7 +204,7 @@ def write_fcu_xlsx(
     # ---- row 6: column headers -------------------------------------------
     header_fill = PatternFill("solid", fgColor=NAVY)
     for col, text in enumerate(column_header, start=1):
-        cell = ws.cell(row=6, column=col, value=text)
+        cell = keep_as_text(ws.cell(row=6, column=col, value=text))
         cell.fill = header_fill
         cell.font = Font(bold=True, size=9, color="FFFFFF")
         cell.alignment = _center
@@ -190,7 +216,7 @@ def write_fcu_xlsx(
     for r, row_values in enumerate(data_rows, start=7):
         is_unit_row = len(row_values) > 2 and str(row_values[2]).strip()
         for col, value in enumerate(row_values, start=1):
-            cell = ws.cell(row=r, column=col, value=value)
+            cell = keep_as_text(ws.cell(row=r, column=col, value=value))
             cell.border = _border
             cell.alignment = _indented if (col == 1 and not is_unit_row) else _left
 

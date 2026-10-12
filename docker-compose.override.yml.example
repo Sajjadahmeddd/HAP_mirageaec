@@ -1,0 +1,25 @@
+# Optional local override. Copy to docker-compose.override.yml to use:
+#
+#     cp docker-compose.override.yml.example docker-compose.override.yml
+#
+# This file used to carry laptop-sized worker counts and resource limits.
+# It no longer needs to: the entrypoint derives the worker count from the
+# CPU available to the container, and the base compose file sets no limits
+# at all. All that is left is the port.
+#
+# Why keep it: port 80 is frequently already held on a developer machine —
+# by IIS or http.sys on Windows, or by a system nginx on Linux — and the
+# resulting bind failure is easy to misread as a problem with the stack.
+# On the VM, port 80 is exactly what you want, which is why this file is
+# gitignored: a server clone has no override to inherit by forgetting -f.
+#
+# With this in place:      http://localhost:8080
+# Without it (and on VMs): http://localhost
+
+services:
+  frontend:
+    # `!override` REPLACES the base list. Without it Compose APPENDS, and
+    # you would publish 80 and 8080 at once — with 80 usually failing on
+    # the very machine this file exists to work around.
+    ports: !override
+      - "127.0.0.1:8080:80"

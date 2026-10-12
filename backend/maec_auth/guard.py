@@ -12,6 +12,7 @@ import logging
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from starlette.routing import Match
 
 log = logging.getLogger("maec.auth")
 
@@ -71,6 +72,21 @@ def permission_for(method: str, path: str) -> str | None:
     return None
 
 
+# The SPA catch-all (GET /{full_path:path}) matches every GET, including
+# /api/... paths, which it answers 404 itself. It is not a product route.
+_CATCH_ALL = "/{full_path:path}"
+
+
+def _a_route_answers(request: Request) -> bool:
+    """Does the app have a real route for this method and path?"""
+    for route in request.app.router.routes:
+        if getattr(route, "path", None) == _CATCH_ALL:
+            continue
+        if route.matches(request.scope)[0] == Match.FULL:
+            return True
+    return False
+
+
 def _refuse(detail: str) -> JSONResponse:
     return JSONResponse({"detail": detail}, status_code=403)
 
@@ -88,8 +104,13 @@ def authorize(request: Request, maec: dict) -> JSONResponse | None:
 
     permission = permission_for(request.method, path)
     if permission is None:
-        # Default closed. A product route added later without an entry above
-        # is refused rather than served, and says so in the log.
+        if not _a_route_answers(request):
+            # No route at all for this method and path: let the app say so,
+            # exactly as the live app does - 405 for a wrong method on a real
+            # path, 404 for a path that does not exist. Nothing is served.
+            return None
+        # Default closed. A real product route added later without an entry
+        # above is refused rather than served, and says so in the log.
         log.warning("maec.auth: %s %s has no permission mapped; refusing",
                     request.method, path)
         return _refuse("This route is not available.")

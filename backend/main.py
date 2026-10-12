@@ -107,9 +107,14 @@ SECURITY_HEADERS = {
 async def gate(request: Request, call_next):
     """Refuse anything from a browser MAEC One has not vouched for."""
     refusal = await auth_gate.inspect(request)
-    if refusal is not None:
-        return refusal
-    return await call_next(request)
+    response = refusal if refusal is not None else await call_next(request)
+    # The answer depended on the cookie, so say so - as the live app's session
+    # middleware does on every request whose session it read (refusals too).
+    # A cache keyed only on the URL must not serve one person's answer to
+    # another. Exempt paths (assets, health) never read it, and get none.
+    if not auth_gate.exempt(request.url.path):
+        response.headers.add_vary_header("Cookie")
+    return response
 
 
 # Registered last, so it is the outermost layer and sees every response —

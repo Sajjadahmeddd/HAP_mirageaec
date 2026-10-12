@@ -197,8 +197,56 @@ def test_every_product_route_names_a_permission():
     assert not unmapped, unmapped
 
 
-def test_an_unmapped_api_route_is_refused_not_served(engineer_client):
-    assert engineer_client.post("/api/hapext/not-a-route").status_code == 403
+def _ungated_status(monkeypatch, client, method, path):
+    """What the app itself answers with the gate switched off - which is what
+    the live app answers, its routing being the same code."""
+    async def let_through(request):
+        return None
+    with monkeypatch.context() as m:
+        m.setattr(gate, "inspect", let_through)
+        return client.request(method, path).status_code
+
+
+@pytest.mark.parametrize("method,path", [
+    ("POST", "/api/hapext/not-a-route"),   # no such path
+    ("GET", "/api/no-such-route"),
+    ("GET", "/api/hapext/convert"),        # a POST-only route
+    ("PUT", "/api/hapext/convert"),
+    ("DELETE", "/api/rebadge/apply"),
+    ("HEAD", "/api/airsizer/config"),      # FastAPI does not add HEAD to GET routes
+    ("OPTIONS", "/api/airsizer/config"),
+])
+def test_no_route_gets_the_app_s_own_answer_not_a_403(monkeypatch, engineer_client, method, path):
+    """For a signed-in person, a wrong method on a real path and a path that
+    does not exist get exactly the app's answer (405 / 404), as on live -
+    never the gate's 403. Nothing is served: there is no route to serve."""
+    expected = _ungated_status(monkeypatch, engineer_client, method, path)
+    assert expected in (404, 405)
+    assert engineer_client.request(method, path).status_code == expected
+
+
+def test_a_real_route_with_no_permission_mapped_is_still_refused(engineer_client):
+    """Default closed where it matters: a product route that exists but was
+    never given a permission is refused, not served."""
+    from backend.main import app
+    app.router.add_api_route("/api/hapext/unmapped-probe", lambda: {"served": True},
+                             methods=["GET"])
+    try:
+        response = engineer_client.get("/api/hapext/unmapped-probe")
+        assert response.status_code == 403
+        assert "served" not in response.text
+    finally:
+        app.router.routes[:] = [r for r in app.router.routes
+                                if getattr(r, "path", "") != "/api/hapext/unmapped-probe"]
+
+
+def test_gated_answers_say_they_depend_on_the_cookie(engineer_client, app_client):
+    """As live's session middleware does: Vary: Cookie on every response
+    whose answer depended on it, refusals included - and not on health."""
+    assert "Cookie" in engineer_client.get("/api/airsizer/config").headers["vary"]
+    assert "Cookie" in app_client.get("/api/airsizer/config").headers["vary"]
+    assert "Cookie" in engineer_client.post("/api/hapext/not-a-route").headers["vary"]
+    assert "Cookie" not in app_client.get("/api/health").headers.get("vary", "")
 
 
 # ================================================================ tab hiding

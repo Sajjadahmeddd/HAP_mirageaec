@@ -102,7 +102,7 @@ beside it (documented in `.env.example`):
 |---|---|---|
 | compose project | `maec` | `maec-et` |
 | published port | `127.0.0.1:80` | `127.0.0.1:${ET_PORT:-8081}` |
-| internal network | `maec_maec_net`, `172.30.57.0/24` | `maec_et_net`, `${ET_NET_SUBNET:-172.30.81.0/24}` |
+| internal network | `maec_maec_net`, `172.30.57.0/24` | `maec_et_net`, `${ET_NET_SUBNET:-10.231.2.0/24}` |
 | MAEC One Core | — | joins `maec_core_net` (external) |
 
 **Going live is a Caddy switch:** change `et.mirageaec.com`'s block from

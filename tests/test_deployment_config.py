@@ -67,7 +67,8 @@ def test_the_entrypoint_is_lf_only():
 
 # ------------------------------------------- running next to the old stack
 OLD_SUBNET = "172.30.57.0/24"
-CORE_SUBNET = "172.31.250.0/24"
+# MAEC One Core: maec_core_private, and the shared maec_core_net.
+CORE_SUBNETS = ("10.231.0.0/24", "10.231.1.0/24")
 
 
 def test_the_project_name_is_set_not_derived_from_the_folder():
@@ -86,7 +87,7 @@ def test_its_network_is_its_own_and_overlaps_neither_neighbour():
     assert re.search(r"name:\s*maec_et_net", compose)
     default = re.search(r'subnet:\s*"\$\{ET_NET_SUBNET:-([^}]+)\}"', compose).group(1)
     ours = ipaddress.ip_network(default)
-    for neighbour in (OLD_SUBNET, CORE_SUBNET):
+    for neighbour in (OLD_SUBNET, *CORE_SUBNETS):
         assert not ours.overlaps(ipaddress.ip_network(neighbour)), neighbour
 
 

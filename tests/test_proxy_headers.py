@@ -65,7 +65,7 @@ def test_the_sign_in_comes_back_to_the_public_address(monkeypatch):
 def test_an_untrusted_peer_s_forwarded_headers_are_ignored(monkeypatch, fake_core):
     """The control for the tests above: the same headers from a peer outside
     TRUSTED_PROXIES change nothing — neither the scheme nor the host."""
-    monkeypatch.setenv("TRUSTED_PROXIES", "172.30.81.0/24")
+    monkeypatch.setenv("TRUSTED_PROXIES", "10.231.2.0/24")
     _client().get("/api/airsizer/config?x=1", headers=THROUGH_THE_PROXIES)
     assert fake_core.calls[-1].headers["x-original-url"] == (
         "http://backend:8000/api/airsizer/config?x=1")
@@ -78,9 +78,11 @@ def test_nobody_is_trusted_when_nothing_is_configured(monkeypatch, fake_core):
 
 
 @pytest.mark.parametrize("peer, trusted", [
-    ("172.30.81.5", True),       # the nginx container, on maec_et_net
-    ("172.30.81.254", True),
-    ("172.31.250.7", False),     # MAEC One Core, on maec_core_net: never
+    ("10.231.2.5", True),        # the nginx container, on maec_et_net
+    ("10.231.2.254", True),
+    ("10.231.1.7", False),       # MAEC One Core, on maec_core_net: never
+    ("10.231.1.1", False),       # maec_core_net's gateway
+    ("10.231.0.5", False),       # Core's private network
     ("172.30.57.3", False),      # the old stack's network
     ("127.0.0.1", False),
     ("203.0.113.7", False),
@@ -90,12 +92,12 @@ def test_nobody_is_trusted_when_nothing_is_configured(monkeypatch, fake_core):
 def test_only_the_nginx_network_is_trusted(monkeypatch, peer, trusted):
     """The backend sits on Core's shared network too, where Core and later
     apps can reach it directly. They must not choose its scheme or host."""
-    monkeypatch.setenv("TRUSTED_PROXIES", "172.30.81.0/24")
+    monkeypatch.setenv("TRUSTED_PROXIES", "10.231.2.0/24")
     assert proxy.trusts(peer) is trusted
 
 
 def test_trusting_everyone_is_refused(monkeypatch):
-    monkeypatch.setenv("TRUSTED_PROXIES", "172.30.81.0/24,*")
+    monkeypatch.setenv("TRUSTED_PROXIES", "10.231.2.0/24,*")
     with pytest.raises(proxy.ProxyConfigError):
         proxy.check()
     with pytest.raises(proxy.ProxyConfigError):
@@ -146,4 +148,4 @@ def test_the_trusted_range_is_exactly_the_nginx_network():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     trusted = re.search(r'TRUSTED_PROXIES:\s*"([^"]+)"', compose).group(1)
     subnet = re.search(r'subnet:\s*"([^"]+)"', compose).group(1)
-    assert trusted == subnet == "${ET_NET_SUBNET:-172.30.81.0/24}"
+    assert trusted == subnet == "${ET_NET_SUBNET:-10.231.2.0/24}"

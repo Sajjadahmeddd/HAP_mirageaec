@@ -25,7 +25,7 @@ def test_https_through_a_trusted_proxy_gets_hsts(monkeypatch):
 def test_an_untrusted_peer_claiming_https_gets_none(monkeypatch):
     """The control: the same header from a peer outside TRUSTED_PROXIES is
     anyone's claim, and pinning a browser on a claim is not on."""
-    monkeypatch.setenv("TRUSTED_PROXIES", "172.30.81.0/24")
+    monkeypatch.setenv("TRUSTED_PROXIES", "10.231.2.0/24")
     assert HSTS not in TestClient(app).get("/api/health", headers=VIA_CADDY).headers
 
 

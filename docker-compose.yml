@@ -39,7 +39,7 @@ services:
       # container lives. Built from the same variable as the subnet below, so
       # the two cannot drift. NOT maec_core_net: Core and any other app there
       # reach this backend directly, and must not choose its scheme or host.
-      TRUSTED_PROXIES: "${ET_NET_SUBNET:-172.30.81.0/24}"
+      TRUSTED_PROXIES: "${ET_NET_SUBNET:-10.231.2.0/24}"
 
     expose:
       - "8000"          # internal network only — never published to the host
@@ -101,12 +101,14 @@ networks:
     name: maec_et_net
     driver: bridge
     # A fixed range, so TRUSTED_PROXIES above can name it. It must overlap
-    # neither the old stack's 172.30.57.0/24 nor Core's (172.31.250.0/24 by
-    # default). Check what the host already uses before changing it:
+    # neither the old stack's 172.30.57.0/24 nor Core's 10.231.0.0/24 and
+    # 10.231.1.0/24. It is in 10.231.x beside Core's, outside Docker's default
+    # address pools (172.17-31.x, 192.168.x), so a network Docker created on
+    # its own cannot already hold it. Check what the host uses before changing:
     #   docker network inspect $(docker network ls -q) --format '{{.Name}} {{range .IPAM.Config}}{{.Subnet}}{{end}}'
     ipam:
       config:
-        - subnet: "${ET_NET_SUBNET:-172.30.81.0/24}"
+        - subnet: "${ET_NET_SUBNET:-10.231.2.0/24}"
   maec_core_net:
     # MAEC One Core's network, created by its own compose project. External:
     # this stack joins it and never creates or removes it.

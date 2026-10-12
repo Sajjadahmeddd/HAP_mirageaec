@@ -77,8 +77,11 @@ def test_the_project_name_is_set_not_derived_from_the_folder():
 
 def test_it_publishes_on_loopback_at_et_port_not_80():
     compose = _read("docker-compose.yml")
-    assert '"127.0.0.1:${ET_PORT:-8081}:80"' in compose
-    assert '"127.0.0.1:80:80"' not in compose
+    assert '"127.0.0.1:${ET_PORT:-8082}:80"' in compose
+    # 8080 is the old Engineering Tools on the VPS, 8081 Project Management
+    for taken in ("80", "8080", "8081"):
+        assert f'"127.0.0.1:{taken}:80"' not in compose
+        assert f"ET_PORT:-{taken}}}" not in compose
 
 
 def test_its_network_is_its_own_and_overlaps_neither_neighbour():

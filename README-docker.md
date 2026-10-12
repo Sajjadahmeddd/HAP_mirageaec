@@ -93,17 +93,29 @@ exist at all.
 
 ## Running next to the old stack
 
-The gated stack is built to run beside the old Engineering Tools on the same
-VPS and collide with none of it. Everything that could clash is set
-explicitly in `docker-compose.yml`, with defaults you can override in a `.env`
-beside it (documented in `.env.example`):
+The gated stack is built to run beside the old Engineering Tools and Project
+Management on the same VPS and collide with neither. Everything that could
+clash is set explicitly in `docker-compose.yml`; its defaults are the VPS's
+values, so nothing needs setting (overrides, if ever wanted, go in `.env.maec`
+— see `.env.example`):
 
-| | old stack | this stack |
-|---|---|---|
-| compose project | `maec` | `maec-et` |
-| published port | `127.0.0.1:80` | `127.0.0.1:${ET_PORT:-8081}` |
-| internal network | `maec_maec_net`, `172.30.57.0/24` | `maec_et_net`, `${ET_NET_SUBNET:-10.231.2.0/24}` |
-| MAEC One Core | — | joins `maec_core_net` (external) |
+| | old Engineering Tools | Project Management | this stack |
+|---|---|---|---|
+| address | `et.mirageaec.com` | `promanage.mirageaec.com` | `engtools.mirageaec.com` |
+| compose project | `maec` | `promanage` | `maec-et` |
+| published port | `127.0.0.1:8080` | `127.0.0.1:8081` | `127.0.0.1:${ET_PORT:-8082}` |
+| images | `maec-backend`, `maec-frontend` | — | `maec-et-backend`, `maec-et-frontend` |
+| internal network | `maec_maec_net` | — | `maec_et_net`, `${ET_NET_SUBNET:-10.231.2.0/24}` |
+| MAEC One Core | — | — | joins `maec_core_net` (external) |
+
+**No `docker-compose.override.yml` on the server.** The stack needs none, and
+none should exist there. **Every compose command passes `--env-file .env.maec`**
+(as Core's runbook does with its own settings file), so compose never falls
+back to a stray `.env` in the directory for its variables:
+
+```bash
+docker compose -f docker-compose.yml --env-file .env.maec up -d --build
+```
 
 The images are `maec-et-backend` and `maec-et-frontend`, never the old stack's
 `maec-backend` / `maec-frontend`: building under those names would retag the
@@ -112,9 +124,11 @@ included — would start the new code. On Docker's containerd image store an
 image whose only tag moves away also drops out of the store, so it cannot
 even be tagged back.
 
-**Going live is a Caddy switch:** change `et.mirageaec.com`'s block from
-`reverse_proxy localhost:80` to `reverse_proxy localhost:8081` and reload
-Caddy. **Rolling back is changing it back.** Neither touches a container.
+**Going live is a new Caddy site:** add an `engtools.mirageaec.com` block
+pointing at `localhost:8082` and reload Caddy. `et.mirageaec.com` keeps
+pointing at the old stack on `localhost:8080`, so both run until the old one
+is retired. **Rolling back is removing that block** (or sending people back to
+et.mirageaec.com). Neither touches a container.
 
 ---
 
@@ -123,38 +137,38 @@ Caddy. **Rolling back is changing it back.** Neither touches a container.
 From the repo root, in WSL:
 
 ```bash
-docker compose build
-docker compose up -d
-docker compose ps          # both services should reach "healthy"
+docker compose -f docker-compose.yml --env-file .env.maec build
+docker compose -f docker-compose.yml --env-file .env.maec up -d
+docker compose -f docker-compose.yml --env-file .env.maec ps   # both "healthy"
 ```
 
 The worker count is derived at startup, so there is nothing to tune for a
-laptop. It publishes on **<http://localhost:8081>** (`ET_PORT`), so a port 80
+laptop. It publishes on **<http://localhost:8082>** (`ET_PORT`), so a port 80
 already held by IIS, http.sys or another stack is no obstacle. Confirm the
 worker count from the startup log:
 
 ```bash
-docker compose logs backend | head -1
+docker compose -f docker-compose.yml --env-file .env.maec logs backend | head -1
 #  MAEC backend: 7 worker process(es) (auto-detected from 8 available CPU(s)), port 8000
 ```
 
 ```bash
-docker compose logs -f
-docker compose down
+docker compose -f docker-compose.yml --env-file .env.maec logs -f
+docker compose -f docker-compose.yml --env-file .env.maec down
 ```
 
 Introspection works normally — the entrypoint passes arguments through:
 
 ```bash
-docker compose run --rm backend python -c "import pymupdf; print(pymupdf.__version__)"
-docker compose run --rm backend id            # must not be uid 0
-docker compose run --rm backend sh            # shell in the image
+docker compose -f docker-compose.yml --env-file .env.maec run --rm backend python -c "import pymupdf; print(pymupdf.__version__)"
+docker compose -f docker-compose.yml --env-file .env.maec run --rm backend id   # must not be uid 0
+docker compose -f docker-compose.yml --env-file .env.maec run --rm backend sh   # shell in the image
 ```
 
 And the guard can be proven live:
 
 ```bash
-docker compose run --rm -e MAEC_GATE_SECRET= backend   # must exit 1, FATAL
+docker compose -f docker-compose.yml --env-file .env.maec run --rm -e MAEC_GATE_SECRET= backend   # must exit 1, FATAL
 ```
 
 **Verify parity before trusting it:** run the 212-page DCG BREEZE report
@@ -177,16 +191,16 @@ cd HAPExt_App
 cp .env.maec.example .env.maec && chmod 600 .env.maec
 nano .env.maec
 
-docker compose -f docker-compose.yml build      # -f skips the laptop override
-docker compose -f docker-compose.yml up -d
+docker compose -f docker-compose.yml --env-file .env.maec build
+docker compose -f docker-compose.yml --env-file .env.maec up -d
 ```
 
 Updating is three commands, and nothing deploys because someone pushed:
 
 ```bash
 git pull
-docker compose -f docker-compose.yml build
-docker compose -f docker-compose.yml up -d
+docker compose -f docker-compose.yml --env-file .env.maec build
+docker compose -f docker-compose.yml --env-file .env.maec up -d
 ```
 
 Rollback is `git checkout <previous-commit>` and the same two commands.
@@ -195,22 +209,23 @@ Rollback is `git checkout <previous-commit>` and the same two commands.
 
 ## HTTPS — required before sharing the URL
 
-The stack publishes plain HTTP on :8081, **bound to 127.0.0.1** — so it is
+The stack publishes plain HTTP on :8082, **bound to 127.0.0.1** — so it is
 reachable from the host itself and from nothing else. These are client
 drawings; do not expose that directly. Caddy on the host handles
-certificates automatically; once this stack is live its block reads:
+certificates automatically; this stack's block reads:
 
 ```
 # /etc/caddy/Caddyfile
-et.mirageaec.com {
-    reverse_proxy localhost:8081    # localhost:80 = the old stack (rollback)
+engtools.mirageaec.com {
+    reverse_proxy localhost:8082
 }
+# et.mirageaec.com keeps its own block, reverse_proxy localhost:8080 (the old stack)
 ```
 
 Caddy then owns :443. The loopback bind in `docker-compose.yml` is what
-keeps :8081 private, and it matters more than a firewall rule here: Docker
+keeps :8082 private, and it matters more than a firewall rule here: Docker
 publishes ports through DNAT rules that are evaluated *before* ufw's, so a
-port published as `8081:80` stays reachable from the internet while `ufw
+port published as `8082:80` stays reachable from the internet while `ufw
 status` still reads "deny". Keep the `127.0.0.1:` prefix on that line.
 
 **One ordering trap:** sign-in needs the real address. MAEC One's cookie is
@@ -252,7 +267,7 @@ What closes it is the bind address in `docker-compose.yml`:
 
 ```yaml
 ports:
-  - "127.0.0.1:${ET_PORT:-8081}:80"     # not "8081:80"
+  - "127.0.0.1:${ET_PORT:-8082}:80"     # not "8082:80"
 ```
 
 **Prove it, both ways.** From another machine on the network (or any host
@@ -313,21 +328,24 @@ a 403). A missing value is not a warning — the entrypoint exits and the
 container does not come up.
 
 ```bash
-docker compose -f docker-compose.yml logs frontend backend | grep -i fatal
+docker compose -f docker-compose.yml --env-file .env.maec logs frontend backend | grep -i fatal
 ```
 
 Confirm the positive case too, or you have only proven the container is
-capable of not starting: open `https://et.mirageaec.com` in a
+capable of not starting: open `https://engtools.mirageaec.com` in a
 fresh incognito window. You must be sent to MAEC One's sign-in and, after
 signing in, land back in Engineering Tools. If Core is down, every page says
 "MAEC One is unavailable" — the gate never lets a request through unchecked.
 
-### Trap 4 — the laptop override following you to the server
+### Trap 4 — an override file following you to the server
 
-Use `-f docker-compose.yml` on the VM, as the deploy commands above do. It
-skips `docker-compose.override.yml`, which publishes 8080 for laptops where
-port 80 is already held. The override is gitignored precisely so a server
-clone cannot inherit one by accident — but `-f` is what makes that certain.
+The server needs **no** `docker-compose.override.yml`, and must not have one:
+the compose file's defaults are the VPS's values (port 8082 included). Use
+`-f docker-compose.yml --env-file .env.maec`, as every command above does —
+`-f` skips any override file that does turn up, and `--env-file` makes the
+settings file explicit rather than whatever `.env` sits in the directory. The
+laptop example (`docker-compose.override.yml.example`) is gitignored once
+copied, so a server clone cannot inherit one by accident.
 
 ### Two snags that are not security problems, and will still cost you an hour
 

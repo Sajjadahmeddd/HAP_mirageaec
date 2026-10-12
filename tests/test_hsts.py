@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from backend.main import app
 
 HSTS = "Strict-Transport-Security"
-VIA_CADDY = {"X-Forwarded-Proto": "https", "X-Forwarded-Host": "et.mirageaec.com"}
+VIA_CADDY = {"X-Forwarded-Proto": "https", "X-Forwarded-Host": "engtools.mirageaec.com"}
 
 
 def test_https_through_a_trusted_proxy_gets_hsts(monkeypatch):

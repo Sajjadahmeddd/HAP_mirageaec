@@ -26,7 +26,7 @@ from backend.main import app
 from conftest import ENGINEER_SESSION, SESSION_COOKIE
 
 ROOT = Path(__file__).resolve().parents[1]
-PUBLIC = "et.mirageaec.com"
+PUBLIC = "engtools.mirageaec.com"
 
 # What nginx sends on, having received Caddy's request: the internal hop is
 # plain http to the backend container, and Caddy's headers ride along.

@@ -58,7 +58,7 @@ Two optional settings:
 | `TRUSTED_PROXIES` | The socket peers whose `X-Forwarded-Proto` and `X-Forwarded-Host` are believed (`proxy.py`); from anyone else they are ignored. Unset trusts nobody. In the container it is the nginx network's range (`maec_et_net`), and never Core's shared network. `*` is refused. |
 
 Behind Caddy and the nginx container the gate sends Core the address the
-browser used (`https://et.mirageaec.com/...`), not the internal
+browser used (`https://engtools.mirageaec.com/...`), not the internal
 hop's — Core only follows a sign-in's `next` back to an app's own address.
 
 Running locally (PowerShell):

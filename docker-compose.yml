@@ -6,9 +6,15 @@
 #     actually available to it at startup.
 
 # Set here, not derived from the folder name: this stack runs NEXT TO the old
-# Engineering Tools on the same VPS (project "maec", 127.0.0.1:80,
-# maec_maec_net, 172.30.57.0/24) and must collide with none of it. Going live
-# is a Caddy switch from localhost:80 to localhost:${ET_PORT}.
+# Engineering Tools on the same VPS (project "maec", 127.0.0.1:8080, images
+# maec-backend / maec-frontend) and Project Management (project "promanage",
+# 127.0.0.1:8081), and must collide with none of it. It is served as
+# engtools.mirageaec.com: Caddy's block for that name points at
+# localhost:${ET_PORT}; et.mirageaec.com stays on the old stack.
+#
+# No docker-compose.override.yml is needed on the server, and none should
+# exist there. Every command passes the settings file explicitly:
+#   docker compose -f docker-compose.yml --env-file .env.maec up -d --build
 name: maec-et
 
 services:
@@ -88,9 +94,10 @@ services:
       # people usually find out about from their logs. The reverse proxy
       # that terminates TLS runs on the same host and reaches this through
       # loopback; nothing else needs to.
-      # ET_PORT (default 8081), not 80: the old Engineering Tools keeps
-      # 127.0.0.1:80 until Caddy is switched over.
-      - "127.0.0.1:${ET_PORT:-8081}:80"
+      # ET_PORT, default 8082: the old Engineering Tools holds 127.0.0.1:8080
+      # and Project Management 127.0.0.1:8081. The default is the right port,
+      # so it is right even if --env-file is forgotten.
+      - "127.0.0.1:${ET_PORT:-8082}:80"
     depends_on:
       backend:
         condition: service_healthy

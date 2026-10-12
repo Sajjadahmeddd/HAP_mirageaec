@@ -1,14 +1,20 @@
-// Engineering Tools' screens, and the address each one has.
+// The address bar is the app's navigation state.
 //
-// The product keeps its page-state machine — a screen is still an id like
-// 'hap-result', and every `ctx.setPage('...')` call around the app is
-// unchanged. This table is the translation between that id and the URL, so
-// react-router owns the address bar while the machine owns the screen.
+// Every screen used to be a value in React state, which meant one URL for the
+// whole app: nothing could be linked to, refreshing always landed on the
+// HAPExt home screen, and the browser's Back button left the site entirely
+// because there was no history to go back through. Each screen now has a path,
+// and `App` pushes one whenever it moves.
 //
-// MAEC One Core's own addresses (/, /home, /admin/*) are not here: they
-// belong to Core, and are routed in App.jsx.
+// The backend already serves index.html for every non-API path (see the `spa`
+// route in backend/main.py), so these paths survive a refresh and a pasted
+// link without any server change.
 
-/** Screen id -> the path that shows it. */
+export const LOGIN = '/'
+export const LAUNCHER = '/home'
+
+/** Screen id -> the path that shows it. Ids are unchanged, so `setPage` still
+ *  takes the same strings it always did. */
 export const PATHS = {
   'hap-home': '/hapext',
   'hap-upload': '/hapext/upload',
@@ -59,16 +65,26 @@ export const HOME_OF = {
 
 // Nothing is stored server-side, so a converted schedule or a half-finished
 // sizing run exists only in memory. Those screens are reachable by Back and
-// Forward within a session, but landing on one from a cold URL would render
-// an empty shell — so a fresh load is sent to the module's home instead.
+// Forward within a session, but landing on one from a cold URL would render an
+// empty shell — so a fresh load is sent to the module's home screen instead.
 export const ENTRY_POINTS = new Set(Object.values(HOME_OF))
 
 export const pathOf = (page) => PATHS[page] || PATHS['hap-home']
 
-/** The screen a path shows, or null when the path is not one of ours. */
-export function pageOf(pathname) {
-  return PAGE_OF[pathname.replace(/\/+$/, '') || '/'] || null
+/** What a path means, or `null` if it is not one of ours. */
+export function resolve(pathname) {
+  const clean = pathname.replace(/\/+$/, '') || '/'
+  if (clean === LAUNCHER) return { opened: false, page: HOME_OF['HAPExt'] }
+  const page = PAGE_OF[clean]
+  return page ? { opened: true, page } : null
 }
 
-/** True when this path belongs to Engineering Tools at all. */
-export const isProductPath = (pathname) => pageOf(pathname) !== null
+/** Where a cold load of `pathname` should actually start. */
+export function landing(pathname) {
+  const found = resolve(pathname)
+  if (!found) return { opened: false, page: HOME_OF['HAPExt'] }
+  if (found.opened && !ENTRY_POINTS.has(found.page)) {
+    return { opened: true, page: HOME_OF[TAB_OF[found.page]] }
+  }
+  return found
+}

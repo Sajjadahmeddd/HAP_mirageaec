@@ -1,27 +1,21 @@
-// The Engineering Tools shell.
+// The MAEC shell: title bar, product tabs, and the page stack — the web
+// equivalent of hap_converter/ui/app_window.py's QStackedWidget.
 //
-// This file used to route between three areas: the sign-in screen, the MAEC
-// One launcher, and Global Admin — with Engineering Tools mounted underneath
-// them. The first three were MAEC One Core's and have moved to their own
-// service. What is left is the product, now mounted at the root.
+// All session state lives here and is handed down as `ctx`, the same shape
+// the desktop pages receive. Nothing is persisted server-side (see §4 of the
+// migration brief): a sizing run happens in one sitting and the exported
+// workbook is the artifact.
 //
-// All Engineering Tools session state lives here and is handed down as
-// `ctx`, the same shape the desktop pages received. Nothing is persisted
-// server-side: a sizing run happens in one sitting and the exported workbook
-// is the artifact. That part is untouched.
-//
-// Who the user is comes from MAEC One Core. The server asks Core about the
-// browser's MAEC One cookie on every request, and sends a signed-out browser
-// to Core's sign-in before this bundle even loads. On load this asks
-// /api/auth/me for the name and the tabs; a 401 there means the person signed
-// out at MAEC One meanwhile, and the window goes to the login_url it carries.
+// Sign-in is MAEC One Core's. The server asks Core about the browser's MAEC
+// One cookie on every request; /api/auth/me says who this is and which tabs
+// to show, and a 401 sends the window to Core's sign-in once (api.js). The
+// sign-in screen and the launcher are Core's pages now: the logo and "Sign
+// out" go there. Everything else here is the live app unchanged.
 
 import { useCallback, useEffect, useState } from 'react'
-import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-
-import { airsizer as airApi, auth, reauthorize } from './api'
+import { airsizer as airApi, auth as authApi, reauthorize } from './api'
 import { AIRSIZER, HAPEXT, save as saveRecent } from './recents'
-import { ENTRY_POINTS, HOME_OF, TAB_OF, pageOf, pathOf } from './routes'
+import { HOME_OF, TAB_OF, landing, pathOf } from './routes'
 
 import HapHome from './hapext/Home.jsx'
 import HapUpload from './hapext/Upload.jsx'
@@ -41,9 +35,8 @@ import AirReview from './airsizer/Review.jsx'
 const TABS = ['HAPExt', 'AirSizer Pro', 'HAPAudit', 'PDF Rebadging']
 const VERSION = '1.2'
 
-// Which module in Core's registry each tab belongs to. The backend decides
-// whether a tab is shown — it runs the tool rules through the same engine
-// Core does — and this is only the name it answers under.
+// Which module in Core's registry each tab belongs to: /api/auth/me answers
+// whether each is shown, from Core's nav_hidden and the person's permissions.
 const MODULE_OF = {
   'HAPExt': 'hapext',
   'AirSizer Pro': 'airsizer',
@@ -51,93 +44,46 @@ const MODULE_OF = {
   'PDF Rebadging': 'rebadge',
 }
 
-const PAGES = {
-  'hap-home': HapHome,
-  'hap-upload': HapUpload,
-  'hap-convert': HapConvert,
-  'hap-result': HapResult,
-  'hap-failure': HapFailure,
-  'hap-change': ChangeRequest,
-  'hap-change-review': ChangeReview,
-  'rebadge-home': RebadgeHome,
-  'rebadge-wizard': RebadgeWizard,
-  'air-home': AirHome,
-  'air-upload': AirUpload,
-  'air-wizard': AirWizard,
-  'air-review': AirReview,
+// The launcher is MAEC One's own page now, so where the live app showed it
+// (`opened` false: the root, /home, an unknown path) this opens HAPExt.
+const entry = (pathname) => {
+  const found = landing(pathname)
+  return found.opened ? found : { opened: true, page: HOME_OF['HAPExt'] }
 }
 
-// ------------------------------------------------------- Engineering Tools
-function EngineeringTools({ ctx, airConfig, airError, modules, coreUrl }) {
-  const location = useLocation()
-  const navigate = useNavigate()
-  const page = pageOf(location.pathname)
+export default function App() {
+  // Where we are, read from the address bar so a refresh and a pasted link
+  // both land somewhere real. A cold load of a module's inner screen is sent
+  // to that module's home (see routes.js).
+  const [route, setRoute] = useState(() => entry(window.location.pathname))
+  const { page } = route
+  const tab = TAB_OF[page] || 'HAPExt'
 
-  // A cold load of a mid-session screen would render an empty shell, because
-  // the conversion or sizing run it needs lives only in memory. Send it to
-  // the module's home instead; Back and Forward still reach it in-session.
-  useEffect(() => {
-    if (page && !ENTRY_POINTS.has(page) && !ctx.warm) {
-      navigate(pathOf(HOME_OF[TAB_OF[page]]), { replace: true })
+  // null while we ask the server; then /api/auth/me's answer, or a refusal
+  // we could not recover from
+  const [session, setSession] = useState(null)
+
+  /** Move to a screen, leaving the browser an entry to come Back to. */
+  const go = useCallback((next, { replace = false } = {}) => {
+    const path = pathOf(next.page)
+    if (replace || window.location.pathname === path) {
+      window.history.replaceState(next, '', path)
+    } else {
+      window.history.pushState(next, '', path)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setRoute(next)
   }, [])
 
-  if (!page) return <Navigate to={pathOf(HOME_OF['HAPExt'])} replace />
+  // Back and Forward. The entry we pushed carries the screen; the pathname is
+  // the fallback for an entry this build did not create.
+  useEffect(() => {
+    const popped = (event) =>
+      setRoute(event.state || entry(window.location.pathname))
+    window.addEventListener('popstate', popped)
+    return () => window.removeEventListener('popstate', popped)
+  }, [])
 
-  const tab = TAB_OF[page] || 'HAPExt'
-  const Page = PAGES[page] || HapHome
-
-  return (
-    <div className="shell">
-      <div className="titlebar">
-        <img className="titlebar-logo" src="/maec-logo.png" alt="MAEC" />
-        <span className="version">v{VERSION}</span>
-        <span className="grow" />
-        {/* Signing out happens at MAEC One, and signs the person out of every
-            app at once — this product holds no session of its own to end. */}
-        {coreUrl && (
-          <a className="btn-ghost" href={coreUrl} title="Sign out at MAEC One">Sign out</a>
-        )}
-      </div>
-
-      <div className="tabbar">
-        {/* A module Core lists in nav_hidden, or one the person may not view,
-            is not offered. That is decluttering, not the boundary: the server
-            refuses a route whose permission the person lacks whatever is
-            rendered here. See maec_auth/guard.py. */}
-        {TABS.filter((name) => modules?.[MODULE_OF[name]] !== false).map((name) => {
-          const disabled = name === 'HAPAudit' || (name === 'AirSizer Pro' && !airConfig)
-          return (
-            <button
-              key={name}
-              className={`tab${tab === name ? ' active' : ''}`}
-              disabled={disabled}
-              title={
-                name === 'HAPAudit' ? 'Coming soon'
-                  : (name === 'AirSizer Pro' && !airConfig)
-                    ? (airError || 'Loading catalogs…')
-                    : `Go to the ${name} home screen`
-              }
-              onClick={() => navigate(pathOf(HOME_OF[name] || 'hap-home'))}
-            >
-              {name}
-            </button>
-          )
-        })}
-      </div>
-
-      <div className="page">
-        <Page ctx={ctx} />
-      </div>
-    </div>
-  )
-}
-
-
-// ------------------------------------------------------------------- shell
-export default function App() {
-  const navigate = useNavigate()
+  const setPage = useCallback((name) => go({ opened: true, page: name }), [go])
 
   // ---- HAPExt session
   const [pdf, setPdf] = useState(null)          // {file, name, pages, size}
@@ -164,26 +110,14 @@ export default function App() {
   // bumped whenever something is written to history, so the panels re-read
   const [recentsKey, setRecentsKey] = useState(0)
 
-  // True once this session has navigated within the app, so a deep screen is
-  // known to have the state it needs rather than being a cold URL.
-  const [warm, setWarm] = useState(false)
-
-  const setPage = useCallback((name) => {
-    setWarm(true)
-    navigate(pathOf(name))
-  }, [navigate])
-
-  // null while we are asking; then the answer from GET /api/auth/me, or a
-  // refusal we could not recover from.
-  const [session, setSession] = useState(null)
-
+  // Ask who we are first; only then load anything the gate protects. Not
+  // signed in at MAEC One: one trip to its sign-in, and back. Sent once
+  // already this visit: stop and say so rather than bouncing between two
+  // services.
   useEffect(() => {
-    auth.me()
+    authApi.me()
       .then((who) => {
         if (who.authenticated) { setSession(who); return }
-        // MAEC One no longer knows this browser. One trip to its sign-in, and
-        // back. If we have already been sent once this visit, stop and say so
-        // rather than bouncing between two services.
         if (!reauthorize(who.login_url)) {
           setSession({ authenticated: false, refused: true })
         }
@@ -191,8 +125,6 @@ export default function App() {
       .catch((err) => setSession({ authenticated: false, refused: true, error: err.message }))
   }, [])
 
-  // Asked once there is a session: a 401 sends the window to sign-in, so
-  // asking before /api/auth/me has answered could leave the page for nothing.
   useEffect(() => {
     if (!session?.authenticated) return
     airApi.config()
@@ -202,6 +134,26 @@ export default function App() {
       })
       .catch((err) => setAirError(err.message))
   }, [session?.authenticated])
+
+  // The bar agrees with what is on screen however we got there — including a
+  // root, /home or unknown address, which opens HAPExt.
+  useEffect(() => {
+    if (!session?.authenticated) return
+    const path = pathOf(page)
+    if (window.location.pathname !== path) {
+      window.history.replaceState(route, '', path)
+    }
+  }, [session, page, route])
+
+  // Signing out happens at MAEC One and signs the person out of every app at
+  // once; this product holds no session of its own to end. A session that
+  // lapses mid-module is handled in api.js: one trip to sign-in, and back.
+  const toMaecOne = () => window.location.assign(session.core_url)
+
+  const goTab = (name) => {
+    if (name === 'HAPAudit') return
+    go({ opened: true, page: HOME_OF[name] || HOME_OF['HAPExt'] })
+  }
 
   const recordSizing = useCallback((row, diffuser, values, result) => {
     setSizingInputs((prev) => ({ ...prev, [row]: { diffuser, values } }))
@@ -224,8 +176,8 @@ export default function App() {
     setAirImported(found)
     setAirDetails(null)
     setAirLogo(null)
-    setPage('air-wizard')
-  }, [setPage])
+    go({ opened: true, page: 'air-wizard' })
+  }, [go])
 
   // ---- history (browser-local; see recents.js)
   const rememberConversion = useCallback((data) => {
@@ -243,8 +195,8 @@ export default function App() {
   const openConversion = useCallback((entry) => {
     setConversion({ ok: true, issues: [], ...entry.payload })
     setPdf(null)                       // the original file is not kept
-    setPage('hap-result')
-  }, [setPage])
+    go({ opened: true, page: 'hap-result' })
+  }, [go])
 
   /** Called from the AirSizer review screen once a session is worth keeping. */
   const rememberSizing = useCallback(() => {
@@ -269,13 +221,12 @@ export default function App() {
     setAirSource(p.source || '')
     setAirBaseName(p.baseName || '')
     if (p.visibleColumns) setVisibleColumns(p.visibleColumns)
-    setPage('air-wizard')
-  }, [setPage])
+    go({ opened: true, page: 'air-wizard' })
+  }, [go])
 
   const ctx = {
     // navigation
-    setPage, warm,
-    setTab: (name) => setPage(HOME_OF[name] || 'hap-home'),
+    page, setPage, tab, setTab: goTab,
     // HAPExt
     pdf, setPdf, conversion, setConversion,
     details, setDetails, logo, setLogo,
@@ -290,22 +241,33 @@ export default function App() {
     bumpRecents: () => setRecentsKey((n) => n + 1),
   }
 
-  // The sign-in screen, the launcher and Global Admin are MAEC One's. The
-  // server's gate stands in front of this bundle, so by the time it runs the
-  // person is signed in; these two states cover asking, and a sign-out that
-  // happened since.
-  if (session === null) {
-    return (
-      <div className="shell" style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <span className="muted">Signing you in…</span>
-      </div>
-    )
+  const pages = {
+    'hap-home': HapHome,
+    'hap-upload': HapUpload,
+    'hap-convert': HapConvert,
+    'hap-result': HapResult,
+    'hap-failure': HapFailure,
+    'hap-change': ChangeRequest,
+    'hap-change-review': ChangeReview,
+    'rebadge-home': RebadgeHome,
+    'rebadge-wizard': RebadgeWizard,
+    'air-home': AirHome,
+    'air-upload': AirUpload,
+    'air-wizard': AirWizard,
+    'air-review': AirReview,
   }
+  const Page = pages[page] || HapHome
 
+  if (session === null) {
+    return <div className="shell" style={{ alignItems: 'center', justifyContent: 'center' }}>
+      <span className="muted">Loading…</span>
+    </div>
+  }
   if (!session.authenticated) {
     // Reached only when one trip to MAEC One's sign-in did not bring the
-    // browser back signed in. The way back is a click, never an automatic
-    // redirect — that is what keeps a refusal from becoming a loop.
+    // browser back signed in, or MAEC One could not be asked. The way back is
+    // a click, never an automatic redirect — that is what keeps a refusal
+    // from becoming a loop.
     return (
       <div className="shell" style={{ alignItems: 'center', justifyContent: 'center' }}>
         <div className="card col" style={{ padding: '28px 32px', maxWidth: 460 }}>
@@ -322,11 +284,48 @@ export default function App() {
   }
 
   return (
-    <Routes>
-      <Route path="*" element={
-        <EngineeringTools ctx={ctx} airConfig={airConfig} airError={airError}
-                          modules={session.modules} coreUrl={session.core_url} />
-      } />
-    </Routes>
+    <div className="shell">
+      <div className="titlebar">
+        <button
+          className="titlebar-home"
+          title="Back to MAEC One"
+          onClick={toMaecOne}
+        >
+          <img className="titlebar-logo" src="/maec-logo.png" alt="MAEC" />
+        </button>
+        <span className="version">v{VERSION}</span>
+        <span className="grow" />
+        <button className="btn-ghost" onClick={toMaecOne} title="Sign out at MAEC One">Sign out</button>
+      </div>
+
+      <div className="tabbar">
+        {/* A module Core leaves out of this person's navigation is not
+            offered. Decluttering, not the boundary: the server refuses a
+            route whose permission the person lacks whatever is shown. */}
+        {TABS.filter((name) => session.modules?.[MODULE_OF[name]] !== false).map((name) => {
+          const disabled = name === 'HAPAudit' || (name === 'AirSizer Pro' && !airConfig)
+          return (
+            <button
+              key={name}
+              className={`tab${tab === name ? ' active' : ''}`}
+              disabled={disabled}
+              title={
+                name === 'HAPAudit' ? 'Coming soon'
+                  : (name === 'AirSizer Pro' && !airConfig)
+                    ? (airError || 'Loading catalogs…')
+                    : `Go to the ${name} home screen`
+              }
+              onClick={() => goTab(name)}
+            >
+              {name}
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="page">
+        <Page ctx={ctx} />
+      </div>
+    </div>
   )
 }

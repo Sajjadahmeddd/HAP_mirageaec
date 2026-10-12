@@ -65,10 +65,10 @@ new. Build both, keep them both running, and alternate:
 
 ```bash
 # 1. current pins
-docker compose build backend && docker tag maec-backend:latest maec-backend:before
+docker compose build backend && docker tag maec-et-backend:latest maec-et-backend:before
 
 # 2. bump the pin in backend/requirements.txt, then
-docker compose build backend && docker tag maec-backend:latest maec-backend:after
+docker compose build backend && docker tag maec-et-backend:latest maec-et-backend:after
 
 # 3. fidelity: run the checks inside the AFTER image against the baseline
 #    pinned on BEFORE (the baselines.json travels with the repo mount)
@@ -76,8 +76,8 @@ docker compose build backend && docker tag maec-backend:latest maec-backend:afte
 # 4. speed: alternate the two, never all-of-one-then-all-of-the-other
 MOUNTS='-v '"$PWD"'/tools:/app/tools -v '"$PWD"'/PDF_Rebadging failures:/fixtures/PDF_Rebadging failures -e MAEC_PARITY_FIXTURES=/fixtures'
 python tools/parity/timing.py interleave -n 7 \
-  --a "docker run --rm $MOUNTS maec-backend:before python tools/parity/timing.py once" \
-  --b "docker run --rm $MOUNTS maec-backend:after  python tools/parity/timing.py once"
+  --a "docker run --rm $MOUNTS maec-et-backend:before python tools/parity/timing.py once" \
+  --b "docker run --rm $MOUNTS maec-et-backend:after  python tools/parity/timing.py once"
 ```
 
 Alternating matters. Run all the old iterations then all the new ones and you

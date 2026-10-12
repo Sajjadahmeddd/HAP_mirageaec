@@ -16,7 +16,11 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    image: maec-backend:latest
+    # maec-et-*, not maec-*: the old stack (project "maec") tags its images
+    # maec-backend / maec-frontend. Building this stack under those names would
+    # retag the old stack's images, and any recreate of the old stack - a
+    # rollback included - would then start THIS code.
+    image: maec-et-backend:latest
     restart: unless-stopped
 
     # The gate's settings live here: CORE_URL (Core inside Docker,
@@ -74,7 +78,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    image: maec-frontend:latest
+    image: maec-et-frontend:latest
     restart: unless-stopped
     ports:
       # The only port exposed, and bound to the loopback interface rather

@@ -105,6 +105,13 @@ beside it (documented in `.env.example`):
 | internal network | `maec_maec_net`, `172.30.57.0/24` | `maec_et_net`, `${ET_NET_SUBNET:-10.231.2.0/24}` |
 | MAEC One Core | — | joins `maec_core_net` (external) |
 
+The images are `maec-et-backend` and `maec-et-frontend`, never the old stack's
+`maec-backend` / `maec-frontend`: building under those names would retag the
+old stack's images, and the next recreate of the old stack — a rollback
+included — would start the new code. On Docker's containerd image store an
+image whose only tag moves away also drops out of the store, so it cannot
+even be tagged back.
+
 **Going live is a Caddy switch:** change `et.mirageaec.com`'s block from
 `reverse_proxy localhost:80` to `reverse_proxy localhost:8081` and reload
 Caddy. **Rolling back is changing it back.** Neither touches a container.
@@ -271,7 +278,7 @@ Expect `000` from the first and `200` from the second. If **both** come back
 and the first result told you nothing. Only once you have seen `200` from the
 second does the `000` from the first mean "bound to loopback".
 
-Do **not** substitute `maec-frontend:latest` for the throwaway container. Run
+Do **not** substitute `maec-et-frontend:latest` for the throwaway container. Run
 on its own, outside the compose network, it exits immediately with `host not
 found in upstream "backend:8000"` — nginx resolves upstream hostnames at
 startup — and you would get `000` from a container that was never listening,
@@ -331,7 +338,7 @@ the test reports `host not found in upstream` — which reads exactly like a
 broken config and is not one:
 
 ```bash
-docker run --rm --add-host backend:127.0.0.1 maec-frontend:latest nginx -t
+docker run --rm --add-host backend:127.0.0.1 maec-et-frontend:latest nginx -t
 ```
 
 **Git Bash on Windows rewrites container paths.** `docker run ... grep -n x

@@ -100,3 +100,11 @@ def test_it_joins_core_s_network_as_external():
 
 def test_render_is_no_longer_faked():
     assert "RENDER" not in _read("docker-compose.yml")
+
+
+def test_its_images_are_not_the_old_stack_s():
+    """Found running both stacks: the old stack (and another project named
+    "maec") use maec-backend / maec-frontend. Sharing those names retags their
+    images, and their next recreate starts this code."""
+    images = re.findall(r"^\s*image:\s*(\S+)", _read("docker-compose.yml"), re.M)
+    assert sorted(images) == ["maec-et-backend:latest", "maec-et-frontend:latest"]

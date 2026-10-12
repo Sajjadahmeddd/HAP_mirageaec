@@ -26,4 +26,8 @@ pillow==12.3.0
 #   itsdangerous   signed the shared-password session cookie (backend/auth.py)
 #
 # The gate (backend/maec_auth/gate.py): one call to MAEC One Core per request.
-httpx>=0.27
+# Pinned like the rest; it is the version requirements-dev.txt already pinned
+# for the test client, so tests and production run the same one. Its own
+# dependencies (httpcore, anyio, certifi, idna, h11) float, as the web
+# framework's do.
+httpx==0.28.1

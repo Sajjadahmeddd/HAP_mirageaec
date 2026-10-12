@@ -47,7 +47,7 @@ jobs:
             backend/requirements.txt
             requirements-dev.txt
       # requirements-dev.txt begins with -r backend/requirements.txt, so this
-      # installs exactly the pinned production set plus pytest and httpx.
+      # installs exactly the pinned production set (httpx included) plus pytest.
       - run: pip install -r requirements-dev.txt
       # main.py registers the SPA route only if frontend/dist exists. It is
       # gitignored and built by render.yaml in production, and the frontend

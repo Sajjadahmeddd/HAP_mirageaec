@@ -51,14 +51,6 @@ def test_our_own_platform_may_still_frame_us():
     assert "frame-ancestors 'none'" not in CSP
 
 
-def test_hsts_only_once_deployed(monkeypatch, client):
-    """Asserting it locally would pin a developer's browser to https://."""
-    monkeypatch.delenv("RENDER", raising=False)
-    assert "Strict-Transport-Security" not in TestClient(app).get("/api/health").headers
-    monkeypatch.setenv("RENDER", "true")
-    assert "Strict-Transport-Security" in TestClient(app).get("/api/health").headers
-
-
 def test_headers_do_not_gate_anything(client, engineer_client):
     """The point of the whole file: nothing here changes who gets in.
 

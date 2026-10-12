@@ -36,11 +36,10 @@ async def lifespan(_app: FastAPI):
     request, so it does not boot at all: `require_all` raises and uvicorn
     exits with the names of what is missing.
     """
-    where = "on Render" if os.environ.get("RENDER") else "locally"
     auth_gate.configure_logging()
     auth_config.require_all()
     auth_proxy.check()
-    print(f"Engineering Tools starting {where}.")
+    print("Engineering Tools starting.")
     print(f"  auth: gate of {auth_config.core_url()} (app {auth_config.app_key()})")
     yield
 
@@ -121,9 +120,13 @@ async def security_headers(request: Request, call_next):
     response = await call_next(request)
     for header, value in SECURITY_HEADERS.items():
         response.headers.setdefault(header, value)
-    # Only meaningful over TLS, and only true on Render — asserting it in
-    # local development would pin a developer's browser to https://localhost.
-    if os.environ.get("RENDER"):
+    # Only meaningful over TLS, so sent whenever this request arrived over
+    # https — directly, or through a trusted proxy's X-Forwarded-Proto
+    # (TRUSTED_PROXIES, maec_auth/proxy.py). Never decided by platform: it used
+    # to key on Render's RENDER variable, which the VPS only had because
+    # compose faked it. Plain http on a developer's machine gets none, which
+    # keeps https://localhost unpinned. MAEC One Core decides it the same way.
+    if request.url.scheme == "https":
         response.headers.setdefault(
             "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
         )

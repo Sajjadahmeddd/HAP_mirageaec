@@ -96,3 +96,6 @@ def test_it_joins_core_s_network_as_external():
     assert "external: true" in block
     assert "name: maec_core_net" in block
 
+
+def test_render_is_no_longer_faked():
+    assert "RENDER" not in _read("docker-compose.yml")

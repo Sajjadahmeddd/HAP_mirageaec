@@ -32,13 +32,6 @@ services:
       # container's cgroup CPU quota (or the visible core count) and uses
       # cores-1 workers. Set it in .env.maec only to override that.
 
-      # INTERIM WART — remove when the follow-up commit lands.
-      # main.py keys HSTS on the presence of RENDER (there is no session
-      # cookie here any more: the cookie is MAEC One's). Setting it keeps
-      # HSTS on with zero code change.
-      # FOLLOW-UP: rename that check to MAEC_HTTPS and delete this line.
-      RENDER: "1"
-
       # MAEC_DEV is deliberately absent — it enables permissive CORS.
 
       # The only peers whose X-Forwarded-Proto and X-Forwarded-Host are

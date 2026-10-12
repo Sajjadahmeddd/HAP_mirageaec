@@ -219,7 +219,8 @@ which compose sets to `maec_et_net`'s fixed range (`backend/maec_auth/proxy.py`;
 uvicorn runs with `--no-proxy-headers` so that is the only list). Without all
 three links the app thinks it is on `http://`, and Core refuses the
 return-after-sign-in address, so people land on the MAEC One launcher instead
-of back in Engineering Tools.
+of back in Engineering Tools. HSTS follows the same scheme: sent over https,
+never on plain http.
 
 ---
 
@@ -395,10 +396,9 @@ API and the HTML document will disagree.
 
 ## Known follow-ups
 
-1. **Rename `RENDER`.** `main.py` keys HSTS on a variable called `RENDER`;
-   compose sets it to `1` so it survives the move. After the VM deployment is green, rename it to something honest
-   (`MAEC_HTTPS`) and delete the compose line — a future maintainer on a
-   Netcup box should not find a variable called `RENDER`.
+1. ~~**Rename `RENDER`.**~~ *Resolved on gate-client* — HSTS follows the
+   request's scheme (https through a trusted proxy), and compose no longer
+   sets `RENDER`.
 2. ~~**Two failing rebadge tests.**~~ *Resolved in b6435c9* — the stale
    assertions now expect the source file name.
 3. ~~**`httpx` is missing.**~~ *Resolved in 21b38cc* — it lives in

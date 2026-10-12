@@ -34,7 +34,7 @@ Everything below is configuration only.
 ## File placement
 
 ```
-HAPExt_App/
+HAP_engtool/
 ├── docker-compose.yml               new
 ├── docker-compose.override.yml.example  new, optional — local port only
 ├── .dockerignore                    new
@@ -185,8 +185,8 @@ Linux is strongly preferred (see *Host OS* below). On a fresh Ubuntu box:
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER && newgrp docker
 
-git clone git@github.com:mirageaecindia-dev/HAPExt_App.git
-cd HAPExt_App
+git clone https://github.com/Sajjadahmeddd/HAP_engtool.git
+cd HAP_engtool
 
 cp .env.maec.example .env.maec && chmod 600 .env.maec
 nano .env.maec

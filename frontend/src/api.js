@@ -23,8 +23,26 @@ export function reauthorize(loginUrl) {
   } catch { /* private mode: fall through and go once */ }
   // Without a login_url, reloading the page lets the server's gate send the
   // browser to sign-in itself.
-  window.location.assign(loginUrl || window.location.href)
+  window.location.assign(loginUrl ? returningHere(loginUrl) : window.location.href)
   return true
+}
+
+/** Core's login_url, coming back to THIS page rather than the API call.
+ *
+ *  Core builds `next` from the URL the gate saw — for a 401 from fetch, that
+ *  is the API route (/api/auth/me, say), and following it after sign-in would
+ *  show raw JSON. Behind the Docker front door it is every first visit: nginx
+ *  serves the bundle itself, so the first thing the gate ever sees is an API
+ *  call. The page's own address is on the same origin, so Core's check of
+ *  `next` treats it exactly as it would have treated the API's. */
+function returningHere(loginUrl) {
+  try {
+    const url = new URL(loginUrl)
+    url.searchParams.set('next', window.location.href)
+    return url.toString()
+  } catch {
+    return loginUrl
+  }
 }
 
 /** Called when /api/auth/me succeeds: the trip worked, so allow another. */

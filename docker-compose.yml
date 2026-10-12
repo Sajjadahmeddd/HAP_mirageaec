@@ -34,6 +34,11 @@ services:
 
       # MAEC_DEV is deliberately absent — it enables permissive CORS.
 
+      # The proxies uvicorn believes X-Forwarded-Proto from (and the app
+      # X-Forwarded-Host): exactly maec_net's subnet below, where the nginx
+      # container lives. Keep the two equal if either is changed.
+      FORWARDED_ALLOW_IPS: "172.30.57.0/24"
+
     expose:
       - "8000"          # internal network only — never published to the host
     networks: [maec_net]
@@ -85,3 +90,10 @@ services:
 networks:
   maec_net:
     driver: bridge
+    # A fixed subnet, so FORWARDED_ALLOW_IPS above can name it. Docker would
+    # otherwise pick one at creation and the trusted range would be a guess.
+    # If this ever clashes with a network already on the host, choose another
+    # private /24 and change FORWARDED_ALLOW_IPS to match.
+    ipam:
+      config:
+        - subnet: 172.30.57.0/24

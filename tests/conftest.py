@@ -36,7 +36,10 @@ CORE_PUBLIC_URL = "http://auth.test"
 APP_KEY = "engineering"
 GATE_SECRET = "test-gate-secret-never-real-0123456789"
 
-SESSION_COOKIE = "maec_session"
+# MAEC One Core's session cookie (Core 830e902). The OLD Engineering Tools
+# keeps its own "maec_session"; the two names must differ.
+SESSION_COOKIE = "maec_one_session"
+OLD_APP_COOKIE = "maec_session"
 ENGINEER_SESSION = "engineer-session-id"
 
 MODULES = ("hapext", "airsizer", "hapaudit", "rebadge")

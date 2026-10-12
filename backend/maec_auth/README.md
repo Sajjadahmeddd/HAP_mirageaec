@@ -12,7 +12,8 @@ itself: MAEC One Core does, and this service asks Core on every request.
 
 ## How it works
 
-Core's session cookie (`maec_session`) is set for the parent domain —
+Core's session cookie (`maec_one_session` — not the old app's `maec_session`,
+so the two can never be confused) is set for the parent domain —
 `.mirageaec.com` in production, `.maec.local` locally — so the browser sends
 it here too. It is only a random id; the session lives in Core's database. So
 on every request the gate calls Core:

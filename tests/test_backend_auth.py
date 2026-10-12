@@ -129,6 +129,28 @@ def test_the_gate_forwards_what_core_needs(engineer_client, fake_core):
                                           "write": 3.0, "pool": 3.0}
 
 
+def test_the_raw_cookie_header_reaches_core_unchanged(app_client, fake_core):
+    """The gate forwards the browser's Cookie header exactly as received -
+    every cookie, in order, spacing intact - and Core picks its own out. A
+    browser on *.mirageaec.com can carry the old app's maec_session beside
+    MAEC One's maec_one_session; neither is renamed, dropped or reordered."""
+    from conftest import OLD_APP_COOKIE
+    raw = (f"{OLD_APP_COOKIE}=old-app-session-value; theme=dark; "
+           f"{SESSION_COOKIE}={ENGINEER_SESSION}; _ga=GA1.2.3")
+    response = app_client.get("/api/airsizer/config", headers={"Cookie": raw})
+    assert response.status_code == 200
+    assert fake_core.calls[-1].headers["cookie"] == raw
+
+
+def test_the_old_app_s_cookie_alone_signs_nobody_in(app_client, fake_core):
+    """The old app's maec_session, even carrying a value Core would accept
+    under its own name, is not MAEC One's cookie."""
+    from conftest import OLD_APP_COOKIE
+    response = app_client.get("/api/airsizer/config",
+                              headers={"Cookie": f"{OLD_APP_COOKIE}={ENGINEER_SESSION}"})
+    assert response.status_code == 401
+
+
 def test_the_gate_secret_never_reaches_the_browser(engineer_client, app_client):
     for response in (engineer_client.get("/api/auth/me"),
                      engineer_client.get("/"),
